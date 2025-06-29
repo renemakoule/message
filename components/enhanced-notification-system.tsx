@@ -7,25 +7,28 @@ import { Bell, X, MessageCircle, Users, Check, UserX } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useMessagingStore } from "@/lib/store"
+import type { Database } from "@/lib/supabase"
+
+type Conversation = Database["public"]["Functions"]["get_conversations_with_last_message"]["Returns"][0]
+type Notification = Database["public"]["Tables"]["notifications"]["Row"]
 
 interface EnhancedNotificationSystemProps {
-  onNotificationClick?: (notification: any) => void
+  onNotificationClick?: (notification: Notification) => void
 }
 
 export function EnhancedNotificationSystem({ onNotificationClick }: EnhancedNotificationSystemProps = {}) {
   const {
     notifications,
-    invitations,
     setSelectedConversation,
-    conversations,
-    acceptInvitation,
-    declineInvitation,
     markNotificationAsRead,
     clearAllNotifications,
+    currentUser,
   } = useMessagingStore()
 
   const [showNotifications, setShowNotifications] = useState(false)
   const [hasPermission, setHasPermission] = useState(false)
+  const [showToast, setShowToast] = useState(false)
+  const [currentToast, setCurrentToast] = useState<Notification | null>(null)
 
   // Demander la permission pour les notifications
   useEffect(() => {
@@ -43,16 +46,33 @@ export function EnhancedNotificationSystem({ onNotificationClick }: EnhancedNoti
   // Notifications du navigateur pour les nouvelles notifications
   useEffect(() => {
     const latestNotification = notifications[0]
-    if (latestNotification && !latestNotification.isRead && hasPermission && document.hidden) {
+    if (latestNotification && !latestNotification.read && hasPermission && document.hidden) {
       new Notification(latestNotification.title, {
         body: latestNotification.message,
-        icon: latestNotification.avatar || "/placeholder.svg",
+        icon: "/placeholder.svg",
         tag: latestNotification.id,
       })
     }
   }, [notifications, hasPermission])
 
-  const handleNotificationClick = (notification: any) => {
+  // Toast notifications pour les nouveaux messages
+  useEffect(() => {
+    const latestNotification = notifications[0]
+    if (latestNotification && !latestNotification.read && latestNotification.type === "message") {
+      setCurrentToast(latestNotification)
+      setShowToast(true)
+      
+      // Auto-hide après 5 secondes
+      const timer = setTimeout(() => {
+        setShowToast(false)
+        markNotificationAsRead(latestNotification.id)
+      }, 5000)
+      
+      return () => clearTimeout(timer)
+    }
+  }, [notifications, markNotificationAsRead])
+
+  const handleNotificationClick = (notification: Notification) => {
     markNotificationAsRead(notification.id)
 
     // Navigation mobile
@@ -63,27 +83,15 @@ export function EnhancedNotificationSystem({ onNotificationClick }: EnhancedNoti
     }
 
     // Navigation desktop
-    if (notification.conversationId) {
-      const conversation = conversations.find((c) => c.id === notification.conversationId)
-      if (conversation) {
-        setSelectedConversation(conversation)
+    if (notification.data && (notification.data as any).conversation_id) {
+      const convId = (notification.data as any).conversation_id
+      // Pour l'instant, on ne gère pas la navigation vers la conversation
+      // car nous n'avons pas accès aux conversations ici
         setShowNotifications(false)
       }
-    }
   }
 
-  const handleAcceptInvitation = (invitationId: string, e: React.MouseEvent) => {
-    e.stopPropagation()
-    acceptInvitation(invitationId)
-  }
-
-  const handleDeclineInvitation = (invitationId: string, e: React.MouseEvent) => {
-    e.stopPropagation()
-    declineInvitation(invitationId)
-  }
-
-  const unreadCount = notifications.filter((n) => !n.isRead).length
-  const pendingInvitations = invitations.filter((i) => i.status === "pending")
+  const unreadCount = notifications.filter((n) => !n.read).length
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
@@ -100,9 +108,10 @@ export function EnhancedNotificationSystem({ onNotificationClick }: EnhancedNoti
     }
   }
 
-  const timeAgo = (date: Date) => {
+  const timeAgo = (date: Date | string) => {
     const now = new Date()
-    const diff = now.getTime() - date.getTime()
+    const then = new Date(date)
+    const diff = now.getTime() - then.getTime()
     const minutes = Math.floor(diff / 60000)
 
     if (minutes < 1) return "À l'instant"
@@ -110,6 +119,16 @@ export function EnhancedNotificationSystem({ onNotificationClick }: EnhancedNoti
     const hours = Math.floor(minutes / 60)
     if (hours < 24) return `Il y a ${hours}h`
     return `Il y a ${Math.floor(hours / 24)}j`
+  }
+
+  const handleClearAllNotifications = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    clearAllNotifications()
+  }
+
+  // Si pas d'utilisateur connecté, ne pas afficher le composant
+  if (!currentUser) {
+    return null
   }
 
   return (
@@ -143,14 +162,14 @@ export function EnhancedNotificationSystem({ onNotificationClick }: EnhancedNoti
                       size="sm"
                       onClick={() => {
                         notifications.forEach((n) => {
-                          if (!n.isRead) markNotificationAsRead(n.id)
+                          if (!n.read) markNotificationAsRead(n.id)
                         })
                       }}
                     >
                       Tout marquer comme lu
                     </Button>
                   )}
-                  <Button variant="ghost" size="sm" onClick={clearAllNotifications}>
+                  <Button variant="ghost" size="sm" onClick={handleClearAllNotifications}>
                     Effacer tout
                   </Button>
                 </div>
@@ -169,51 +188,21 @@ export function EnhancedNotificationSystem({ onNotificationClick }: EnhancedNoti
                     <div
                       key={notification.id}
                       className={`p-4 hover:bg-gray-50 cursor-pointer transition-colors ${
-                        !notification.isRead ? "bg-blue-50 border-l-4 border-l-blue-500" : ""
+                        !notification.read ? "bg-blue-50 border-l-4 border-l-blue-500" : ""
                       }`}
                       onClick={() => handleNotificationClick(notification)}
                     >
                       <div className="flex items-start gap-3">
-                        {notification.avatar ? (
-                          <Avatar className="h-8 w-8">
-                            <AvatarImage src={notification.avatar || "/placeholder.svg"} />
-                            <AvatarFallback>{notification.title[0]}</AvatarFallback>
-                          </Avatar>
-                        ) : (
                           <div className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center">
                             {getNotificationIcon(notification.type)}
                           </div>
-                        )}
 
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between">
                             <p className="font-medium text-sm truncate">{notification.title}</p>
-                            <span className="text-xs text-gray-500">{timeAgo(notification.timestamp)}</span>
+                            <span className="text-xs text-gray-500">{timeAgo(notification.created_at)}</span>
                           </div>
                           <p className="text-sm text-gray-600 truncate">{notification.message}</p>
-
-                          {/* Actions pour les invitations */}
-                          {notification.type === "invitation_received" && notification.invitationId && (
-                            <div className="flex gap-2 mt-2">
-                              <Button
-                                size="sm"
-                                onClick={(e) => handleAcceptInvitation(notification.invitationId!, e)}
-                                className="h-7 px-3 text-xs"
-                              >
-                                <Check className="h-3 w-3 mr-1" />
-                                Accepter
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={(e) => handleDeclineInvitation(notification.invitationId!, e)}
-                                className="h-7 px-3 text-xs"
-                              >
-                                <UserX className="h-3 w-3 mr-1" />
-                                Refuser
-                              </Button>
-                            </div>
-                          )}
                         </div>
                       </div>
                     </div>
@@ -228,56 +217,24 @@ export function EnhancedNotificationSystem({ onNotificationClick }: EnhancedNoti
       {/* Overlay pour fermer */}
       {showNotifications && <div className="fixed inset-0 z-40" onClick={() => setShowNotifications(false)} />}
 
-      {/* Notifications toast en temps réel */}
-      <div className="fixed top-4 right-4 z-50 space-y-2">
-        {notifications
-          .filter((n) => !n.isRead)
-          .slice(0, 3)
-          .map((notification) => (
-            <ToastNotification
-              key={notification.id}
-              notification={notification}
-              onClick={() => handleNotificationClick(notification)}
-              onClose={() => markNotificationAsRead(notification.id)}
-            />
-          ))}
-      </div>
-    </>
-  )
-}
-
-interface ToastNotificationProps {
-  notification: any
-  onClick: () => void
-  onClose: () => void
-}
-
-function ToastNotification({ notification, onClick, onClose }: ToastNotificationProps) {
-  useEffect(() => {
-    const timer = setTimeout(onClose, 5000) // Auto-close après 5 secondes
-    return () => clearTimeout(timer)
-  }, [onClose])
-
-  return (
+      {/* Toast notification pour nouveaux messages */}
+      {showToast && currentToast && (
+        <div className="fixed top-4 right-4 z-50 animate-in slide-in-from-right duration-300">
     <div
-      className="bg-white border rounded-lg shadow-lg p-4 w-80 animate-in slide-in-from-right cursor-pointer hover:shadow-xl transition-shadow"
-      onClick={onClick}
+            className="bg-white border rounded-lg shadow-lg p-4 w-80 cursor-pointer hover:shadow-xl transition-shadow"
+            onClick={() => {
+              handleNotificationClick(currentToast)
+              setShowToast(false)
+            }}
     >
       <div className="flex items-start gap-3">
-        {notification.avatar ? (
-          <Avatar className="h-8 w-8">
-            <AvatarImage src={notification.avatar || "/placeholder.svg"} />
-            <AvatarFallback>{notification.title[0]}</AvatarFallback>
-          </Avatar>
-        ) : (
-          <div className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center">
-            <Bell className="h-4 w-4" />
+              <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
+                <MessageCircle className="h-4 w-4 text-blue-600" />
           </div>
-        )}
 
         <div className="flex-1 min-w-0">
-          <p className="font-medium text-sm">{notification.title}</p>
-          <p className="text-sm text-gray-600">{notification.message}</p>
+                <p className="font-medium text-sm">{currentToast.title}</p>
+                <p className="text-sm text-gray-600">{currentToast.message}</p>
         </div>
 
         <Button
@@ -286,12 +243,16 @@ function ToastNotification({ notification, onClick, onClose }: ToastNotification
           className="h-6 w-6"
           onClick={(e) => {
             e.stopPropagation()
-            onClose()
+                  setShowToast(false)
+                  markNotificationAsRead(currentToast.id)
           }}
         >
           <X className="h-3 w-3" />
         </Button>
       </div>
     </div>
+        </div>
+      )}
+    </>
   )
 }

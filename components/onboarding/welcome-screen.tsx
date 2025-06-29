@@ -9,13 +9,21 @@ import { UserSelectionModal } from "@/components/onboarding/user-selection-modal
 import { GroupCreationModal } from "@/components/onboarding/group-creation-modal"
 import { PublicGroupsModal } from "@/components/onboarding/public-groups-modal"
 
-export function WelcomeScreen() {
+// Le composant reçoit maintenant le callback
+export function WelcomeScreen({ onConversationCreated }: { onConversationCreated: () => void }) {
   const { currentUser } = useMessagingStore()
   const [showUserSelection, setShowUserSelection] = useState(false)
   const [showGroupCreation, setShowGroupCreation] = useState(false)
   const [showPublicGroups, setShowPublicGroups] = useState(false)
 
-  if (!currentUser) return null
+  if (!currentUser) return null;
+  
+  // Wrapper pour fermer la modale APRÈS que le parent a rafraîchi
+  const handleConversationCreated = () => {
+    onConversationCreated();
+    setShowUserSelection(false);
+    setShowGroupCreation(false);
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
@@ -109,10 +117,11 @@ export function WelcomeScreen() {
         </Card>
 
         {/* Modales */}
-        {showUserSelection && <UserSelectionModal onClose={() => setShowUserSelection(false)} />}
+        {showUserSelection && <UserSelectionModal onClose={() => setShowUserSelection(false)} onConversationCreated={handleConversationCreated} />}
         {showGroupCreation && <GroupCreationModal onClose={() => setShowGroupCreation(false)} />}
         {showPublicGroups && <PublicGroupsModal onClose={() => setShowPublicGroups(false)} />}
       </div>
     </div>
   )
 }
+

@@ -1,109 +1,71 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { X, Search, MessageCircle, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { supabase } from "@/lib/supabase-client"
 import { useMessagingStore } from "@/lib/store"
+import { useUsers } from "@/hooks/use-users"
+import { useConversations } from "@/hooks/use-conversations"
+import type { Database } from "@/lib/supabase"
+
+type UserProfile = Database["public"]["Tables"]["users"]["Row"];
 
 interface UserSelectionModalProps {
-  onClose: () => void
+  onClose: () => void;
+  onConversationCreated: () => void; // Callback pour notifier le parent
 }
 
-interface User {
-  id: string
-  name: string
-  email: string
-  avatar_url?: string
-  status: "online" | "offline" | "away"
-  about?: string
-}
+export function UserSelectionModal({ onClose, onConversationCreated }: UserSelectionModalProps) {
+  const { currentUser } = useMessagingStore()
+  const { createPersonalConversation } = useConversations(currentUser?.id);
+  const { users, loading: usersLoading } = useUsers();
 
-export function UserSelectionModal({ onClose }: UserSelectionModalProps) {
-  const { currentUser, createPersonalConversation } = useMessagingStore()
-  const [users, setUsers] = useState<User[]>([])
-  const [filteredUsers, setFilteredUsers] = useState<User[]>([])
   const [searchQuery, setSearchQuery] = useState("")
-  const [isLoading, setIsLoading] = useState(true)
-  const [selectedUser, setSelectedUser] = useState<User | null>(null)
+  const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null)
   const [inviteMessage, setInviteMessage] = useState("")
+  const [isCreating, setIsCreating] = useState(false); // État de chargement local
 
-  // Charger tous les utilisateurs
-  useEffect(() => {
-    const loadUsers = async () => {
-      try {
-        const { data, error } = await supabase
-          .from("users")
-          .select("*")
-          .neq("id", currentUser?.id) // Exclure l'utilisateur actuel
-          .order("name")
+  const filteredUsers = (users || [])
+    .filter((user) => user.id !== currentUser?.id)
+    .filter(
+      (user) =>
+        user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (user.email && user.email.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
 
-        if (error) {
-          console.error("Erreur de chargement des utilisateurs:", error)
-          return
-        }
+  const handleSendInvitation = async () => {
+    if (!selectedUser) return;
+    
+    setIsCreating(true);
 
-        setUsers(data || [])
-        setFilteredUsers(data || [])
-      } catch (error) {
-        console.error("Erreur:", error)
-      } finally {
-        setIsLoading(false)
-      }
+    try {
+      await createPersonalConversation(selectedUser.id, inviteMessage.trim() || undefined);
+      onConversationCreated(); // Notifier le parent que la conversation est créée et qu'il faut rafraîchir
+    } catch (error) {
+      console.error("Failed to create conversation:", error);
+      // Ici, vous pourriez afficher une notification toast d'erreur à l'utilisateur
+      setIsCreating(false); // Assurez-vous de réinitialiser l'état de chargement en cas d'erreur
     }
-
-    if (currentUser) {
-      loadUsers()
-    }
-  }, [currentUser])
-
-  // Filtrer les utilisateurs selon la recherche
-  useEffect(() => {
-    if (!searchQuery.trim()) {
-      setFilteredUsers(users)
-    } else {
-      const filtered = users.filter(
-        (user) =>
-          user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          user.email.toLowerCase().includes(searchQuery.toLowerCase()),
-      )
-      setFilteredUsers(filtered)
-    }
-  }, [searchQuery, users])
-
-  const handleUserSelect = (user: User) => {
-    setSelectedUser(user)
+    // La fermeture de la modale est gérée par le parent après le rafraîchissement
+    // onClose(); // On pourrait le laisser au parent de décider
   }
 
-  const handleSendInvitation = () => {
-    if (!selectedUser) return
-
-    createPersonalConversation(selectedUser.id, inviteMessage.trim() || undefined)
-    onClose()
-  }
-
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string | null) => {
     switch (status) {
-      case "online":
-        return "bg-green-500"
-      case "away":
-        return "bg-yellow-500"
-      default:
-        return "bg-gray-400"
+      case "online": return "bg-green-500"
+      case "away": return "bg-yellow-500"
+      default: return "bg-gray-400"
     }
   }
 
-  const getStatusText = (status: string) => {
+  const getStatusText = (status: string | null) => {
     switch (status) {
-      case "online":
-        return "En ligne"
-      case "away":
-        return "Absent"
-      default:
-        return "Hors ligne"
+      case "online": return "En ligne"
+      case "away": return "Absent"
+      default: return "Hors ligne"
     }
   }
 
@@ -116,7 +78,7 @@ export function UserSelectionModal({ onClose }: UserSelectionModalProps) {
             <h2 className="text-xl font-semibold">Nouvelle conversation</h2>
             <p className="text-gray-600 text-sm">Choisissez une personne avec qui discuter</p>
           </div>
-          <Button variant="ghost" size="icon" onClick={onClose}>
+          <Button variant="ghost" size="icon" onClick={onClose} disabled={isCreating}>
             <X className="h-5 w-5" />
           </Button>
         </div>
@@ -136,7 +98,7 @@ export function UserSelectionModal({ onClose }: UserSelectionModalProps) {
 
         {/* Liste des utilisateurs */}
         <div className="flex-1 overflow-y-auto p-6">
-          {isLoading ? (
+          {usersLoading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
               <span className="ml-2 text-gray-600">Chargement des utilisateurs...</span>
@@ -157,7 +119,7 @@ export function UserSelectionModal({ onClose }: UserSelectionModalProps) {
                   className={`flex items-center gap-4 p-4 rounded-lg border cursor-pointer transition-colors ${
                     selectedUser?.id === user.id ? "bg-blue-50 border-blue-200" : "hover:bg-gray-50 border-gray-200"
                   }`}
-                  onClick={() => handleUserSelect(user)}
+                  onClick={() => setSelectedUser(user)}
                 >
                   <div className="relative">
                     <Avatar className="h-12 w-12">
@@ -170,7 +132,6 @@ export function UserSelectionModal({ onClose }: UserSelectionModalProps) {
                       )} border-2 border-white rounded-full`}
                     />
                   </div>
-
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <h3 className="font-medium text-gray-900 truncate">{user.name}</h3>
@@ -181,7 +142,6 @@ export function UserSelectionModal({ onClose }: UserSelectionModalProps) {
                     <p className="text-sm text-gray-600 truncate">{user.email}</p>
                     {user.about && <p className="text-sm text-gray-500 truncate mt-1">{user.about}</p>}
                   </div>
-
                   {selectedUser?.id === user.id && (
                     <div className="flex-shrink-0">
                       <div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center">
@@ -205,6 +165,7 @@ export function UserSelectionModal({ onClose }: UserSelectionModalProps) {
                 value={inviteMessage}
                 onChange={(e) => setInviteMessage(e.target.value)}
                 maxLength={200}
+                disabled={isCreating}
               />
               <p className="text-xs text-gray-500 mt-1">{inviteMessage.length}/200 caractères</p>
             </div>
@@ -221,12 +182,12 @@ export function UserSelectionModal({ onClose }: UserSelectionModalProps) {
             )}
           </div>
           <div className="flex gap-3">
-            <Button variant="outline" onClick={onClose}>
+            <Button variant="outline" onClick={onClose} disabled={isCreating}>
               Annuler
             </Button>
-            <Button onClick={handleSendInvitation} disabled={!selectedUser}>
-              <MessageCircle className="h-4 w-4 mr-2" />
-              Envoyer l'invitation
+            <Button onClick={handleSendInvitation} disabled={!selectedUser || isCreating}>
+              {isCreating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <MessageCircle className="h-4 w-4 mr-2" />}
+              {isCreating ? "Création en cours..." : "Envoyer l'invitation"}
             </Button>
           </div>
         </div>
@@ -234,3 +195,4 @@ export function UserSelectionModal({ onClose }: UserSelectionModalProps) {
     </div>
   )
 }
+

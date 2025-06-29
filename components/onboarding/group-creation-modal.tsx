@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { X, Users, Plus, Search } from "lucide-react"
+import { X, Users, Plus, Search, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -10,13 +10,18 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { useMessagingStore } from "@/lib/store"
+import { useUsers } from "@/hooks/use-users"
+import { useConversations } from "@/hooks/use-conversations"
 
 interface GroupCreationModalProps {
   onClose: () => void
 }
 
 export function GroupCreationModal({ onClose }: GroupCreationModalProps) {
-  const { allUsers, currentUser, createGroupConversation } = useMessagingStore()
+  const { currentUser } = useMessagingStore()
+  const { createGroupConversation, refetch: refetchConversations } = useConversations(currentUser?.id);
+  const { users, loading: usersLoading } = useUsers();
+
   const [step, setStep] = useState<"details" | "members">("details")
   const [groupName, setGroupName] = useState("")
   const [groupDescription, setGroupDescription] = useState("")
@@ -24,33 +29,33 @@ export function GroupCreationModal({ onClose }: GroupCreationModalProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedMembers, setSelectedMembers] = useState<string[]>([])
 
-  // Filtrer les utilisateurs (exclure l'utilisateur actuel)
-  const filteredUsers = allUsers
+  const filteredUsers = (users || [])
     .filter((user) => user.id !== currentUser?.id)
     .filter(
       (user) =>
         user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        user.email.toLowerCase().includes(searchQuery.toLowerCase()),
-    )
+        (user.email && user.email.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
 
   const toggleMember = (userId: string) => {
     setSelectedMembers((prev) => (prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]))
   }
 
-  const handleCreateGroup = () => {
+  const handleCreateGroup = async () => {
     if (!groupName.trim()) return
 
-    createGroupConversation({
+    await createGroupConversation({
       name: groupName.trim(),
       description: groupDescription.trim() || undefined,
-      participants: selectedMembers,
+      participantIds: selectedMembers,
       isPublic,
     })
-
+    
+    await refetchConversations();
     onClose()
   }
 
-  const canProceed = step === "details" ? groupName.trim() : selectedMembers.length > 0
+  const canProceed = step === "details" ? !!groupName.trim() : selectedMembers.length > 0
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -101,7 +106,6 @@ export function GroupCreationModal({ onClose }: GroupCreationModalProps) {
         <div className="flex-1 overflow-y-auto p-6">
           {step === "details" ? (
             <div className="space-y-6">
-              {/* Nom du groupe */}
               <div>
                 <Label htmlFor="groupName" className="text-sm font-medium">
                   Nom du groupe *
@@ -114,8 +118,6 @@ export function GroupCreationModal({ onClose }: GroupCreationModalProps) {
                   className="mt-2"
                 />
               </div>
-
-              {/* Description */}
               <div>
                 <Label htmlFor="groupDescription" className="text-sm font-medium">
                   Description (optionnel)
@@ -129,8 +131,6 @@ export function GroupCreationModal({ onClose }: GroupCreationModalProps) {
                   rows={3}
                 />
               </div>
-
-              {/* Groupe public */}
               <div className="flex items-center justify-between p-4 border rounded-lg">
                 <div>
                   <Label htmlFor="isPublic" className="text-sm font-medium">
@@ -143,9 +143,12 @@ export function GroupCreationModal({ onClose }: GroupCreationModalProps) {
                 <Switch id="isPublic" checked={isPublic} onCheckedChange={setIsPublic} />
               </div>
             </div>
+          ) : usersLoading ? (
+            <div className="flex justify-center items-center h-full">
+                <Loader2 className="h-8 w-8 animate-spin text-primary"/>
+            </div>
           ) : (
             <div className="space-y-6">
-              {/* Barre de recherche */}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input
@@ -155,21 +158,19 @@ export function GroupCreationModal({ onClose }: GroupCreationModalProps) {
                   className="pl-10"
                 />
               </div>
-
-              {/* Membres sélectionnés */}
               {selectedMembers.length > 0 && (
                 <div>
                   <h3 className="text-sm font-medium mb-3">Membres sélectionnés ({selectedMembers.length})</h3>
                   <div className="flex flex-wrap gap-2">
                     {selectedMembers.map((userId) => {
-                      const user = allUsers.find((u) => u.id === userId)
+                      const user = users.find((u) => u.id === userId)
                       return user ? (
                         <div
                           key={userId}
                           className="flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm"
                         >
                           <Avatar className="h-5 w-5">
-                            <AvatarImage src={user.avatar || "/placeholder.svg"} />
+                            <AvatarImage src={user.avatar_url || "/placeholder.svg"} />
                             <AvatarFallback className="text-xs">{user.name[0]}</AvatarFallback>
                           </Avatar>
                           <span>{user.name}</span>
@@ -185,8 +186,6 @@ export function GroupCreationModal({ onClose }: GroupCreationModalProps) {
                   </div>
                 </div>
               )}
-
-              {/* Liste des utilisateurs */}
               <div>
                 <h3 className="text-sm font-medium mb-3">Utilisateurs disponibles</h3>
                 <div className="space-y-2 max-h-60 overflow-y-auto">
@@ -196,9 +195,9 @@ export function GroupCreationModal({ onClose }: GroupCreationModalProps) {
                       className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer"
                       onClick={() => toggleMember(user.id)}
                     >
-                      <Checkbox checked={selectedMembers.includes(user.id)} onChange={() => toggleMember(user.id)} />
+                      <Checkbox checked={selectedMembers.includes(user.id)} onCheckedChange={() => {}} />
                       <Avatar className="h-10 w-10">
-                        <AvatarImage src={user.avatar || "/placeholder.svg"} />
+                        <AvatarImage src={user.avatar_url || "/placeholder.svg"} />
                         <AvatarFallback>{user.name[0]}</AvatarFallback>
                       </Avatar>
                       <div className="flex-1">
@@ -250,3 +249,4 @@ export function GroupCreationModal({ onClose }: GroupCreationModalProps) {
     </div>
   )
 }
+

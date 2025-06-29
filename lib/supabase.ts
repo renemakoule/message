@@ -415,6 +415,23 @@ export interface Database {
           participant_count: number
         }[]
       }
+      get_existing_personal_conversation: {
+        Args: {
+          user1_id: string
+          user2_id: string
+        }
+        Returns: {
+          id: string
+          name: string
+          type: string
+          description: string | null
+          avatar_url: string | null
+          is_public: boolean
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }[]
+      }
       mark_messages_as_read: {
         Args: {
           conversation_uuid: string

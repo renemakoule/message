@@ -1,19 +1,20 @@
 "use client"
-
+ 
 import { useEffect, useState } from "react"
 import { AuthService } from "@/lib/auth"
 import type { User } from "@supabase/supabase-js"
 import type { Database } from "@/lib/supabase"
-
+import { useMessagingStore } from "@/lib/store" // <-- ADDED
+ 
 type UserProfile = Database["public"]["Tables"]["users"]["Row"]
-
+ 
 interface AuthState {
   user: User | null
   profile: UserProfile | null
   loading: boolean
   error: string | null
 }
-
+ 
 export function useAuth() {
   const [state, setState] = useState<AuthState>({
     user: null,
@@ -21,7 +22,10 @@ export function useAuth() {
     loading: true,
     error: null,
   })
-
+ 
+  // Get setters from the Zustand store
+  const { setCurrentUser, setAuthenticated } = useMessagingStore() // <-- ADDED
+ 
   useEffect(() => {
     // Get initial session
     const getInitialSession = async () => {
@@ -42,13 +46,13 @@ export function useAuth() {
         })
       }
     }
-
+ 
     getInitialSession()
-
+ 
     // Listen to auth changes
     const {
       data: { subscription },
-    } = AuthService.onAuthStateChange((authUser) => {
+    } = AuthService.onAuthStateChange(async (authUser) => {
       setState({
         user: authUser,
         profile: authUser?.profile || null,
@@ -56,12 +60,25 @@ export function useAuth() {
         error: null,
       })
     })
-
+ 
     return () => {
       subscription.unsubscribe()
     }
   }, [])
-
+  // ADDED: Effect to sync with Zustand store
+  useEffect(() => {
+    if (state.loading) return; // Wait until loading is finished
+ 
+    if (state.user && state.profile) {
+      setCurrentUser(state.profile)
+      setAuthenticated(true)
+    } else {
+      setCurrentUser(null)
+      setAuthenticated(false)
+    }
+  }, [state.user, state.profile, state.loading, setCurrentUser, setAuthenticated])
+ 
+ 
   const signInWithGoogle = async () => {
     try {
       setState((prev) => ({ ...prev, loading: true, error: null }))
@@ -74,7 +91,7 @@ export function useAuth() {
       }))
     }
   }
-
+ 
   const signOut = async () => {
     try {
       setState((prev) => ({ ...prev, loading: true, error: null }))
@@ -87,20 +104,10 @@ export function useAuth() {
       }))
     }
   }
-
-  const updateStatus = async (status: "online" | "offline" | "away") => {
-    try {
-      await AuthService.updateUserStatus(status)
-    } catch (error) {
-      console.error("Error updating status:", error)
-    }
-  }
-
+ 
   return {
     ...state,
     signInWithGoogle,
     signOut,
-    updateStatus,
-    isAuthenticated: !!state.user,
   }
 }

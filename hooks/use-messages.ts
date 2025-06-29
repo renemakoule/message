@@ -3,11 +3,11 @@
 import { useEffect, useState, useCallback } from "react"
 import { supabase } from "@/lib/supabase-client"
 import { RealtimeService } from "@/lib/realtime"
+import { uploadMedia } from "@/lib/store"
 import type { Database } from "@/lib/supabase"
 
-type Message = Database["public"]["Tables"]["messages"]["Row"] & {
-  sender: Database["public"]["Tables"]["users"]["Row"]
-}
+type User = Database["public"]["Tables"]["users"]["Row"]
+type Message = Database["public"]["Tables"]["messages"]["Row"] & { sender: User }
 type MessageInsert = Database["public"]["Tables"]["messages"]["Insert"]
 
 export function useMessages(conversationId?: string, userId?: string) {
@@ -16,20 +16,17 @@ export function useMessages(conversationId?: string, userId?: string) {
   const [error, setError] = useState<string | null>(null)
 
   const loadMessages = useCallback(async () => {
-    if (!conversationId) return
+    if (!conversationId) return;
 
     try {
       setLoading(true)
-      const { data, error } = await supabase
+      const { data, error: fetchError } = await supabase
         .from("messages")
-        .select(`
-          *,
-          sender:users(*)
-        `)
+        .select(`*, sender:users(*)`)
         .eq("conversation_id", conversationId)
         .order("created_at", { ascending: true })
 
-      if (error) throw error
+      if (fetchError) throw fetchError
 
       setMessages((data as Message[]) || [])
       setError(null)
@@ -45,92 +42,184 @@ export function useMessages(conversationId?: string, userId?: string) {
     loadMessages()
   }, [loadMessages])
 
-  // Subscribe to real-time messages
+  // --- CORRECTION : GESTION DE LA MISE À JOUR EN TEMPS RÉEL ET NOTIFICATIONS ---
   useEffect(() => {
-    if (!conversationId) return
+    if (!conversationId || !userId) {
+      console.log(`❌ Cannot subscribe to conversation: conversationId=${conversationId}, userId=${userId}`)
+      return
+    }
+
+    console.log(`🔔 Setting up real-time subscription for conversation: ${conversationId}, user: ${userId}`)
 
     const channel = RealtimeService.subscribeToConversation(
       conversationId,
       (newMessage) => {
-        setMessages((prev) => {
-          // Avoid duplicates
-          const exists = prev.some((msg) => msg.id === newMessage.id)
-          if (exists) return prev
+        console.log(`📨 Received real-time message:`, newMessage)
+        // Vérifier si c'est un message d'un autre utilisateur
+        if (newMessage.sender_id !== userId) {
+          console.log(`📨 Processing message from other user: ${newMessage.sender_id}`)
+          // Ajouter le message à l'état local
+          setMessages((prevMessages) => {
+            // Éviter les doublons en vérifiant l'ID ET le timestamp
+            const isDuplicate = prevMessages.some((msg) => 
+              msg.id === newMessage.id || 
+              (msg.content === newMessage.content && 
+               Math.abs(new Date(msg.created_at).getTime() - new Date(newMessage.created_at).getTime()) < 1000)
+            )
+            
+            if (isDuplicate) {
+              console.log('Duplicate message detected, skipping:', newMessage.id)
+              return prevMessages
+            }
+            
+            console.log('Adding real-time message:', newMessage)
+            return [...prevMessages, newMessage as Message]
+          })
 
-          return [...prev, newMessage]
-        })
+          // Les notifications sont maintenant gérées par le hook useNotifications global
+          // pour éviter les doublons et gérer toutes les conversations
+        } else {
+          console.log(`📨 Processing own message: ${newMessage.id}`)
+          // C'est un message de l'utilisateur actuel, on peut le traiter différemment
+          // Par exemple, on peut mettre à jour le statut d'un message optimiste
+        setMessages((prevMessages) => {
+            const tempMessage = prevMessages.find(msg => 
+              msg.id.startsWith('temp_') && 
+              msg.content === newMessage.content &&
+              msg.sender_id === userId
+            )
+            
+            if (tempMessage) {
+              console.log('Updating temp message with real message:', newMessage)
+              return prevMessages.map(msg => 
+                msg.id === tempMessage.id 
+                  ? { ...newMessage, sender: tempMessage.sender } as Message 
+                  : msg
+              )
+            }
+            
+            return prevMessages
+          })
+        }
       },
       (typingIndicators) => {
-        // Handle typing indicators if needed
-        console.log("Typing indicators:", typingIndicators)
+        console.log(`⌨️ Typing indicators updated:`, typingIndicators)
+        // Logique de l'indicateur de frappe
       },
     )
 
+    console.log(`✅ Real-time subscription established for conversation: ${conversationId}`)
+
     return () => {
+      console.log(`🔌 Cleaning up real-time subscription for conversation: ${conversationId}`)
       RealtimeService.unsubscribe(`conversation:${conversationId}`)
     }
-  }, [conversationId])
+  }, [conversationId, userId])
 
-  const sendMessage = async (content: string, type: "text" | "image" | "video" | "file" | "audio" = "text") => {
+  const sendMessage = async (
+    content: string,
+    type: "text" | "image" | "video" | "file" = "text",
+    mediaData?: { media_url: string; file_name: string; file_size: number },
+  ) => {
     if (!conversationId || !userId) throw new Error("Missing required parameters")
 
     try {
-      const messageData: MessageInsert = {
+      // --- CORRECTION : MISE À JOUR OPTIMISTE AMÉLIORÉE ---
+      // 1. Créez un message temporaire pour l'UI
+      const tempId = `temp_${Date.now()}_${Math.random().toString(36).substring(2)}`
+      const { data: currentUserProfile } = await supabase.from('users').select('*').eq('id', userId).single()
+      
+      if (!currentUserProfile) throw new Error("Current user profile not found.")
+
+      const optimisticMessage: Message = {
+        id: tempId,
+        conversation_id: conversationId,
+        sender_id: userId,
+        content: content,
+        type: type,
+        media_url: mediaData?.media_url || null,
+        file_name: mediaData?.file_name || null,
+        file_size: mediaData?.file_size || null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        edited_at: null,
+        status: 'sending',
+        sender: currentUserProfile,
+        reply_to: null,
+      }
+
+      // 2. Ajoutez-le immédiatement à l'état local AVEC UNE MISE À JOUR SYNCHRONE
+      setMessages((prevMessages) => {
+        console.log('Adding optimistic message:', optimisticMessage)
+        return [...prevMessages, optimisticMessage]
+      })
+
+      // 3. Petit délai pour s'assurer que la mise à jour optimiste est visible
+      await new Promise(resolve => setTimeout(resolve, 50))
+
+      // 4. Envoyez le vrai message au backend
+      const messageInsert: MessageInsert = {
         conversation_id: conversationId,
         sender_id: userId,
         content,
         type,
+        media_url: mediaData?.media_url,
+        file_name: mediaData?.file_name,
+        file_size: mediaData?.file_size,
       }
 
-      const { data, error } = await supabase
+      const { data: realMessage, error: insertError } = await supabase
         .from("messages")
-        .insert(messageData)
-        .select(`
-          *,
-          sender:users(*)
-        `)
+        .insert(messageInsert)
+        .select()
         .single()
+      
+      if (insertError) throw insertError
+      
+      // 5. Remplacez le message temporaire par le vrai message
+      setMessages((prevMessages) => {
+        console.log('Replacing temp message with real message:', realMessage)
+        return prevMessages.map((msg) =>
+          msg.id === tempId 
+            ? { ...realMessage, sender: currentUserProfile } as Message 
+            : msg
+        )
+      })
 
-      if (error) throw error
-
-      return data as Message
     } catch (err) {
       console.error("Error sending message:", err)
+      // En cas d'erreur, retirez le message optimiste
+      setMessages((prevMessages) => {
+        console.log('Removing temp message due to error')
+        return prevMessages.filter(msg => !msg.id.startsWith('temp_'))
+      })
       throw err
     }
   }
 
-  const markAsRead = async () => {
-    if (!conversationId || !userId) return
+  const sendMediaMessage = async (
+    file: File,
+    caption: string,
+    type: "image" | "video" | "file",
+  ) => {
+    if (!conversationId || !userId) throw new Error("Missing required parameters")
 
     try {
-      await supabase.rpc("mark_messages_as_read", {
-        conversation_uuid: conversationId,
-        user_uuid: userId,
+      const publicUrl = await uploadMedia(file, "media", userId)
+      await sendMessage(caption, type, {
+        media_url: publicUrl,
+        file_name: file.name,
+        file_size: file.size,
       })
     } catch (err) {
-      console.error("Error marking messages as read:", err)
+      console.error("Error sending media message:", err)
+      throw err
     }
   }
 
   const startTyping = async () => {
     if (!conversationId || !userId) return
-
-    try {
-      await RealtimeService.sendTypingIndicator(conversationId, userId)
-    } catch (err) {
-      console.error("Error starting typing indicator:", err)
-    }
-  }
-
-  const stopTyping = async () => {
-    if (!conversationId || !userId) return
-
-    try {
-      await RealtimeService.stopTypingIndicator(conversationId, userId)
-    } catch (err) {
-      console.error("Error stopping typing indicator:", err)
-    }
+    await RealtimeService.sendTypingIndicator(conversationId, userId)
   }
 
   return {
@@ -138,9 +227,9 @@ export function useMessages(conversationId?: string, userId?: string) {
     loading,
     error,
     sendMessage,
-    markAsRead,
+    sendMediaMessage,
     startTyping,
-    stopTyping,
     refetch: loadMessages,
   }
 }
+

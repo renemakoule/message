@@ -1,563 +1,193 @@
 "use client"
 
+// -----------------------------------------------------------------------------
+// IMPORTS ET CLIENT SUPABASE
+// -----------------------------------------------------------------------------
+
 import { create } from "zustand"
+import { supabase } from "./supabase-client"
+import type { Database } from "./supabase"
 
-interface User {
-  id: string
-  name: string
-  email: string
-  avatar?: string
-  status?: "online" | "offline" | "away"
-  about?: string
-  phone?: string
-  location?: string
-  birthday?: string
-  website?: string
-  lastSeen?: Date
-}
+// -----------------------------------------------------------------------------
+// TYPES DE DONNÉES
+// -----------------------------------------------------------------------------
 
-interface Conversation {
-  id: string
-  name: string
-  type: "personal" | "group"
-  avatar?: string
-  description?: string
-  lastMessage: string
-  lastMessageTime: string
-  unreadCount: number
-  isOnline?: boolean
-  memberCount?: number
-  status?: "active" | "pending" | "declined"
-  participants: string[]
-  createdBy?: string
-  isPublic?: boolean
-  invitedBy?: string
-}
+type UserProfile = Database["public"]["Tables"]["users"]["Row"]
+type Conversation = Database["public"]["Functions"]["get_conversations_with_last_message"]["Returns"][0]
+type Notification = Database["public"]["Tables"]["notifications"]["Row"]
 
-interface Message {
-  id: string
+/**
+ * Représente l'état d'un appel en cours.
+ */
+type Call = {
   conversationId: string
-  senderId: string
-  senderName: string
-  senderAvatar?: string
-  content: string
-  timestamp: string
-  type: "text" | "image" | "video" | "file" | "audio" | "system"
-  status?: "sending" | "sent" | "delivered" | "read"
-  mediaUrl?: string
-  fileName?: string
-  fileSize?: string
-  uploadProgress?: number
-  isNew?: boolean
+  type: "audio" | "video"
+  status: "ringing" | "active" // L'appel sonne ou est actif
+  participant: {
+    id: string
+    name: string
+    avatar?: string | null
+  }
 }
 
-interface Invitation {
-  id: string
-  fromUserId: string
-  toUserId: string
-  conversationId: string
-  type: "personal" | "group"
-  status: "pending" | "accepted" | "declined"
-  createdAt: Date
-  message?: string
-}
+// -----------------------------------------------------------------------------
+// INTERFACE DU STORE ZUSTAND
+// -----------------------------------------------------------------------------
 
-interface Notification {
-  id: string
-  type: "message" | "invitation_sent" | "invitation_received" | "invitation_accepted" | "invitation_declined"
-  title: string
-  message: string
-  avatar?: string
-  timestamp: Date
-  conversationId?: string
-  invitationId?: string
-  isRead: boolean
-  fromUserId?: string
-}
-
-interface TypingUser {
-  userId: string
-  userName: string
-  conversationId: string
-  timestamp: Date
-}
-
+/**
+ * Interface définissant l'état et les actions pour la gestion de la messagerie.
+ */
 interface MessagingStore {
-  // Auth state
-  currentUser: User | null
+  // --- État Global de l'UI ---
+  currentUser: UserProfile | null
   isAuthenticated: boolean
-
-  // Users
-  allUsers: User[]
-  onlineUsers: string[]
-
-  // Conversations
-  conversations: Conversation[]
   selectedConversation: Conversation | null
-  messages: Record<string, Message[]>
-
-  // Invitations
-  invitations: Invitation[]
-
-  // Notifications
+  isCallActive: boolean
+  currentCall: Call | null
   notifications: Notification[]
 
-  // Typing indicators
-  typingUsers: TypingUser[]
-
-  // Actions
-  setCurrentUser: (user: User | null) => void
+  // --- Actions pour modifier l'état ---
+  setCurrentUser: (user: UserProfile | null) => void
   setAuthenticated: (isAuth: boolean) => void
-  loadAllUsers: () => void
   setSelectedConversation: (conversation: Conversation | null) => void
-
-  // Conversation actions
-  createPersonalConversation: (targetUserId: string, message?: string) => void
-  createGroupConversation: (data: {
-    name: string
-    description?: string
-    participants: string[]
-    isPublic?: boolean
-  }) => void
-  joinPublicGroup: (groupId: string) => void
-
-  // Message actions
-  sendMessage: (conversationId: string, content: string, type?: "text" | "image" | "video" | "file" | "audio") => void
-  markMessagesAsRead: (conversationId: string) => void
-
-  // Invitation actions
-  sendInvitation: (toUserId: string, conversationId: string, type: "personal" | "group", message?: string) => void
-  acceptInvitation: (invitationId: string) => void
-  declineInvitation: (invitationId: string) => void
-
-  // Notification actions
-  addNotification: (notification: Omit<Notification, "id" | "timestamp" | "isRead">) => void
+  startCall: (conversationId: string, type: "audio" | "video") => void
+  endCall: () => void
+  setNotifications: (notifications: Notification[]) => void
+  addNotification: (notification: Notification) => void
   markNotificationAsRead: (notificationId: string) => void
   clearAllNotifications: () => void
-
-  // Typing actions
-  startTyping: (conversationId: string) => void
-  stopTyping: (conversationId: string) => void
-
-  // Presence actions
-  updateUserStatus: (userId: string, status: "online" | "offline" | "away") => void
 }
 
+// -----------------------------------------------------------------------------
+// STORE ZUSTAND (`useMessagingStore`)
+// -----------------------------------------------------------------------------
+
+/**
+ * Hook Zustand pour accéder et gérer l'état global de l'application de messagerie.
+ */
 export const useMessagingStore = create<MessagingStore>((set, get) => ({
-  // Initial state
+  // --- État initial ---
   currentUser: null,
   isAuthenticated: false,
-  allUsers: [
-    {
-      id: "user1",
-      name: "Alice Martin",
-      email: "alice@example.com",
-      avatar: "/placeholder.svg?height=40&width=40",
-      status: "online",
-      about: "Designer passionnée",
-    },
-    {
-      id: "user2",
-      name: "Bob Dupont",
-      email: "bob@example.com",
-      avatar: "/placeholder.svg?height=40&width=40",
-      status: "offline",
-      about: "Développeur Full Stack",
-    },
-    {
-      id: "user3",
-      name: "Claire Moreau",
-      email: "claire@example.com",
-      avatar: "/placeholder.svg?height=40&width=40",
-      status: "online",
-      about: "Chef de projet",
-    },
-    {
-      id: "user4",
-      name: "David Leroy",
-      email: "david@example.com",
-      avatar: "/placeholder.svg?height=40&width=40",
-      status: "away",
-      about: "Marketing Manager",
-    },
-    {
-      id: "user5",
-      name: "Emma Bernard",
-      email: "emma@example.com",
-      avatar: "/placeholder.svg?height=40&width=40",
-      status: "online",
-      about: "UX Designer",
-    },
-  ],
-  onlineUsers: ["user1", "user3", "user5"],
-  conversations: [],
   selectedConversation: null,
-  messages: {},
-  invitations: [],
+  isCallActive: false,
+  currentCall: null,
   notifications: [],
-  typingUsers: [],
 
-  // Auth actions
+  // --- Actions ---
+
   setCurrentUser: (user) => set({ currentUser: user }),
-  setAuthenticated: (isAuth) => set({ isAuthenticated: isAuth }),
 
-  loadAllUsers: () => {
-    // Simuler le chargement des utilisateurs depuis Supabase
-    // En réalité, ceci sera une requête à Supabase
-  },
+  setAuthenticated: (isAuth) => set({ isAuthenticated: isAuth }),
 
   setSelectedConversation: (conversation) => {
     set({ selectedConversation: conversation })
-    if (conversation) {
-      get().markMessagesAsRead(conversation.id)
-    }
   },
 
-  createPersonalConversation: (targetUserId, message) => {
-    const { currentUser, allUsers } = get()
-    if (!currentUser) return
+  startCall: (conversationId, type) => {
+    const { selectedConversation } = get()
+    if (!selectedConversation) return
 
-    const targetUser = allUsers.find((u) => u.id === targetUserId)
-    if (!targetUser) return
-
-    // Vérifier si une conversation existe déjà
-    const existingConv = get().conversations.find((c) => c.type === "personal" && c.participants.includes(targetUserId))
-
-    if (existingConv) {
-      set({ selectedConversation: existingConv })
-      return
-    }
-
-    const newConversation: Conversation = {
-      id: Date.now().toString(),
-      name: targetUser.name,
-      type: "personal",
-      avatar: targetUser.avatar,
-      lastMessage: message || "Invitation envoyée...",
-      lastMessageTime: "Maintenant",
-      unreadCount: 0,
-      status: "pending",
-      participants: [currentUser.id, targetUserId],
-      invitedBy: currentUser.id,
-    }
-
-    set((state) => ({
-      conversations: [newConversation, ...state.conversations],
-      selectedConversation: newConversation,
-    }))
-
-    // Envoyer l'invitation
-    get().sendInvitation(targetUserId, newConversation.id, "personal", message)
-
-    // Si un message initial est fourni, l'envoyer
-    if (message) {
-      get().sendMessage(newConversation.id, message)
-    }
-  },
-
-  createGroupConversation: (data) => {
-    const { currentUser } = get()
-    if (!currentUser) return
-
-    const newConversation: Conversation = {
-      id: Date.now().toString(),
-      name: data.name,
-      type: "group",
-      description: data.description,
-      avatar: "/placeholder.svg?height=40&width=40",
-      lastMessage: "Groupe créé",
-      lastMessageTime: "Maintenant",
-      unreadCount: 0,
-      status: "active",
-      participants: [currentUser.id, ...data.participants],
-      memberCount: data.participants.length + 1,
-      createdBy: currentUser.id,
-      isPublic: data.isPublic || false,
-    }
-
-    set((state) => ({
-      conversations: [newConversation, ...state.conversations],
-      selectedConversation: newConversation,
-    }))
-
-    // Envoyer des invitations aux participants
-    data.participants.forEach((userId) => {
-      get().sendInvitation(userId, newConversation.id, "group")
-    })
-
-    // Message système de création
-    const systemMessage: Message = {
-      id: Date.now().toString(),
-      conversationId: newConversation.id,
-      senderId: "system",
-      senderName: "Système",
-      content: `${currentUser.name} a créé le groupe "${data.name}"`,
-      timestamp: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
-      type: "system",
-      status: "read",
-    }
-
-    set((state) => ({
-      messages: {
-        ...state.messages,
-        [newConversation.id]: [systemMessage],
-      },
-    }))
-  },
-
-  joinPublicGroup: (groupId) => {
-    const { currentUser, conversations } = get()
-    if (!currentUser) return
-
-    const group = conversations.find((c) => c.id === groupId && c.isPublic)
-    if (!group || group.participants.includes(currentUser.id)) return
-
-    // Ajouter l'utilisateur au groupe
-    set((state) => ({
-      conversations: state.conversations.map((c) =>
-        c.id === groupId
-          ? {
-              ...c,
-              participants: [...c.participants, currentUser.id],
-              memberCount: (c.memberCount || 0) + 1,
-            }
-          : c,
-      ),
-    }))
-
-    // Message système
-    const systemMessage: Message = {
-      id: Date.now().toString(),
-      conversationId: groupId,
-      senderId: "system",
-      senderName: "Système",
-      content: `${currentUser.name} a rejoint le groupe`,
-      timestamp: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
-      type: "system",
-      status: "read",
-    }
-
-    set((state) => ({
-      messages: {
-        ...state.messages,
-        [groupId]: [...(state.messages[groupId] || []), systemMessage],
-      },
-    }))
-  },
-
-  sendMessage: (conversationId, content, type = "text") => {
-    const { currentUser } = get()
-    if (!currentUser) return
-
-    const newMessage: Message = {
-      id: Date.now().toString(),
-      conversationId,
-      senderId: currentUser.id,
-      senderName: currentUser.name,
-      senderAvatar: currentUser.avatar,
-      content,
-      timestamp: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
-      type,
-      status: "sending",
-    }
-
-    set((state) => ({
-      messages: {
-        ...state.messages,
-        [conversationId]: [...(state.messages[conversationId] || []), newMessage],
-      },
-      conversations: state.conversations.map((conv) =>
-        conv.id === conversationId ? { ...conv, lastMessage: content, lastMessageTime: "Maintenant" } : conv,
-      ),
-    }))
-
-    // Simuler l'envoi
-    setTimeout(() => {
-      set((state) => ({
-        messages: {
-          ...state.messages,
-          [conversationId]: state.messages[conversationId].map((msg) =>
-            msg.id === newMessage.id ? { ...msg, status: "sent" } : msg,
-          ),
+    set({
+      isCallActive: true,
+      currentCall: {
+        conversationId,
+        type,
+        status: "ringing",
+        participant: {
+          id: selectedConversation.id,
+          name: selectedConversation.name,
+          avatar: selectedConversation.avatar_url,
         },
-      }))
-
-      // Simuler la réception
-      setTimeout(() => {
-        set((state) => ({
-          messages: {
-            ...state.messages,
-            [conversationId]: state.messages[conversationId].map((msg) =>
-              msg.id === newMessage.id ? { ...msg, status: "delivered" } : msg,
-            ),
-          },
-        }))
-      }, 500)
-    }, 1000)
-  },
-
-  markMessagesAsRead: (conversationId) => {
-    set((state) => ({
-      messages: {
-        ...state.messages,
-        [conversationId]: (state.messages[conversationId] || []).map((msg) => ({
-          ...msg,
-          isNew: false,
-          status: msg.senderId !== state.currentUser?.id ? "read" : msg.status,
-        })),
       },
-      conversations: state.conversations.map((conv) =>
-        conv.id === conversationId ? { ...conv, unreadCount: 0 } : conv,
-      ),
-    }))
-  },
-
-  sendInvitation: (toUserId, conversationId, type, message) => {
-    const { currentUser } = get()
-    if (!currentUser) return
-
-    const invitation: Invitation = {
-      id: Date.now().toString(),
-      fromUserId: currentUser.id,
-      toUserId,
-      conversationId,
-      type,
-      status: "pending",
-      createdAt: new Date(),
-      message,
-    }
-
-    set((state) => ({
-      invitations: [...state.invitations, invitation],
-    }))
-
-    // Notification pour le destinataire
-    get().addNotification({
-      type: "invitation_received",
-      title: `Invitation de ${currentUser.name}`,
-      message: type === "group" ? "Vous invite à rejoindre un groupe" : "Vous invite à discuter",
-      avatar: currentUser.avatar,
-      conversationId,
-      invitationId: invitation.id,
-      fromUserId: currentUser.id,
     })
-  },
 
-  acceptInvitation: (invitationId) => {
-    const { invitations, currentUser } = get()
-    const invitation = invitations.find((i) => i.id === invitationId)
-    if (!invitation || !currentUser) return
-
-    // Marquer l'invitation comme acceptée
-    set((state) => ({
-      invitations: state.invitations.map((i) => (i.id === invitationId ? { ...i, status: "accepted" } : i)),
-      conversations: state.conversations.map((c) =>
-        c.id === invitation.conversationId ? { ...c, status: "active" } : c,
-      ),
-    }))
-
-    // Notification pour l'expéditeur
-    get().addNotification({
-      type: "invitation_accepted",
-      title: `${currentUser.name} a accepté`,
-      message: "Votre invitation a été acceptée",
-      avatar: currentUser.avatar,
-      conversationId: invitation.conversationId,
-      fromUserId: currentUser.id,
-    })
-  },
-
-  declineInvitation: (invitationId) => {
-    const { invitations, currentUser } = get()
-    const invitation = invitations.find((i) => i.id === invitationId)
-    if (!invitation || !currentUser) return
-
-    // Marquer l'invitation comme refusée
-    set((state) => ({
-      invitations: state.invitations.map((i) => (i.id === invitationId ? { ...i, status: "declined" } : i)),
-      conversations: state.conversations.map((c) =>
-        c.id === invitation.conversationId ? { ...c, status: "declined" } : c,
-      ),
-    }))
-
-    // Notification pour l'expéditeur
-    get().addNotification({
-      type: "invitation_declined",
-      title: `${currentUser.name} a refusé`,
-      message: "Votre invitation a été refusée",
-      avatar: currentUser.avatar,
-      conversationId: invitation.conversationId,
-      fromUserId: currentUser.id,
-    })
-  },
-
-  addNotification: (notificationData) => {
-    const newNotification: Notification = {
-      ...notificationData,
-      id: Date.now().toString(),
-      timestamp: new Date(),
-      isRead: false,
-    }
-
-    set((state) => ({
-      notifications: [newNotification, ...state.notifications.slice(0, 49)], // Garder max 50
-    }))
-  },
-
-  markNotificationAsRead: (notificationId) => {
-    set((state) => ({
-      notifications: state.notifications.map((n) => (n.id === notificationId ? { ...n, isRead: true } : n)),
-    }))
-  },
-
-  clearAllNotifications: () => {
-    set({ notifications: [] })
-  },
-
-  startTyping: (conversationId) => {
-    const { currentUser } = get()
-    if (!currentUser) return
-
-    const typingUser: TypingUser = {
-      userId: currentUser.id,
-      userName: currentUser.name,
-      conversationId,
-      timestamp: new Date(),
-    }
-
-    set((state) => ({
-      typingUsers: [
-        ...state.typingUsers.filter((t) => !(t.userId === currentUser.id && t.conversationId === conversationId)),
-        typingUser,
-      ],
-    }))
-
-    // Auto-remove après 3 secondes
+    // Simule la connexion de l'appel après quelques secondes
     setTimeout(() => {
-      get().stopTyping(conversationId)
+      set((state) =>
+        state.currentCall ? { ...state, currentCall: { ...state.currentCall, status: "active" } } : state,
+      )
     }, 3000)
   },
 
-  stopTyping: (conversationId) => {
-    const { currentUser } = get()
-    if (!currentUser) return
+  endCall: () => set({ isCallActive: false, currentCall: null }),
 
+  // Actions pour les notifications
+  setNotifications: (notifications) => set({ notifications }),
+
+  addNotification: (notification) =>
     set((state) => ({
-      typingUsers: state.typingUsers.filter(
-        (t) => !(t.userId === currentUser.id && t.conversationId === conversationId),
+      // Ajoute la nouvelle notification au début et limite le tableau à 50 notifications
+      notifications: [notification, ...state.notifications].slice(0, 50),
+    })),
+
+  markNotificationAsRead: (notificationId) => {
+    // Mise à jour optimiste de l'UI
+    set((state) => ({
+      notifications: state.notifications.map((n) =>
+        n.id === notificationId ? { ...n, read: true } : n,
       ),
     }))
+    // Met à jour le backend en arrière-plan sans bloquer l'UI
+    supabase
+      .from("notifications")
+      .update({ read: true })
+      .eq("id", notificationId)
+      .then(({ error }) => {
+        if (error) console.error("Failed to mark notification as read:", error)
+      })
   },
 
-  updateUserStatus: (userId, status) => {
-    set((state) => ({
-      allUsers: state.allUsers.map((u) =>
-        u.id === userId ? { ...u, status, lastSeen: status === "offline" ? new Date() : undefined } : u,
-      ),
-      onlineUsers:
-        status === "online"
-          ? [...state.onlineUsers.filter((id) => id !== userId), userId]
-          : state.onlineUsers.filter((id) => id !== userId),
-    }))
+  clearAllNotifications: () => {
+    const userId = get().currentUser?.id
+    if (!userId) return
+
+    // Mise à jour optimiste de l'UI
+    set({ notifications: [] })
+
+    // Supprime toutes les notifications pour l'utilisateur dans le backend
+    supabase
+      .from("notifications")
+      .delete()
+      .eq("user_id", userId)
+      .then(({ error }) => {
+        if (error) console.error("Failed to clear notifications:", error)
+      })
   },
 }))
+
+// -----------------------------------------------------------------------------
+// FONCTIONS UTILITAIRES
+// -----------------------------------------------------------------------------
+
+/**
+ * Télécharge un fichier vers Supabase Storage.
+ * @param file Le fichier à télécharger.
+ * @param bucket Le nom du bucket de stockage. Par défaut, 'media'.
+ * @param userId L'ID de l'utilisateur qui télécharge, pour l'organisation des fichiers.
+ * @returns L'URL publique du fichier téléchargé.
+ */
+export async function uploadMedia(file: File, bucket: string = "media", userId: string): Promise<string> {
+  if (!userId) {
+    throw new Error("User ID is required to upload media.")
+  }
+
+  const fileExt = file.name.split(".").pop()
+  // Crée un chemin de fichier unique pour éviter les collisions de noms
+  const filePath = `${userId}/${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`
+
+  const { error: uploadError } = await supabase.storage.from(bucket).upload(filePath, file)
+
+  if (uploadError) {
+    console.error("Error uploading file to Supabase Storage:", uploadError)
+    throw uploadError
+  }
+
+  const { data } = supabase.storage.from(bucket).getPublicUrl(filePath)
+
+  if (!data.publicUrl) {
+    throw new Error("Could not get public URL for the uploaded file.")
+  }
+
+  return data.publicUrl
+}

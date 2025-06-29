@@ -1,40 +1,20 @@
 "use client"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import { useMessagingStore } from "@/lib/store"
 import { MediaMessageBubble } from "@/components/media-message-bubble"
+import { Loader2 } from "lucide-react"
 
-interface MessageBubbleProps {
-  message: {
-    id: string
-    senderId: string
-    senderName: string
-    senderAvatar?: string
-    content: string
-    timestamp: string
-    type: "text" | "image" | "video" | "file"
-    status?: "sending" | "sent" | "delivered" | "read"
-    mediaUrl?: string
-    fileName?: string
-    fileSize?: string
-    uploadProgress?: number
-  }
-}
+export function MessageBubble({ message }: { message: any }) {
+  const { currentUser } = useMessagingStore()
 
-export function MessageBubble({ message }: MessageBubbleProps) {
-  const { user } = useMessagingStore()
+  if (!message || !currentUser) return null;
 
-  // Si c'est un message média, utiliser le composant spécialisé
-  if (message.type !== "text") {
-    return <MediaMessageBubble message={message} />
-  }
+  const isOwnMessage = message.sender_id === currentUser.id
+  const isSystemMessage = message.type === "system"
 
-  const isOwnMessage = message.senderId === user?.id
-  const isSystemMessage = message.senderId === "system"
-
-  // Message système (appels)
+  // Message système (création de groupe, etc.)
   if (isSystemMessage) {
     return (
       <div className="flex justify-center py-2">
@@ -44,39 +24,47 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       </div>
     )
   }
+  
+  // Message média
+  if (message.type !== "text") {
+    return <MediaMessageBubble message={message} />
+  }
 
+  // Message texte standard
   return (
     <div className={cn("flex gap-3", isOwnMessage && "flex-row-reverse")}>
       {!isOwnMessage && (
         <Avatar className="h-8 w-8">
-          <AvatarImage src={message.senderAvatar || "/placeholder.svg"} />
-          <AvatarFallback>{message.senderName[0]}</AvatarFallback>
+          <AvatarImage src={message.sender?.avatar_url || "/placeholder.svg"} />
+          <AvatarFallback>{message.sender?.name?.[0]}</AvatarFallback>
         </Avatar>
       )}
 
-      <div className={cn("flex flex-col gap-1", isOwnMessage && "items-end")}>
-        {!isOwnMessage && <span className="text-xs text-muted-foreground font-medium">{message.senderName}</span>}
+      <div className={cn("flex flex-col gap-1", isOwnMessage ? "items-end" : "items-start")}>
+        {!isOwnMessage && <span className="text-xs text-muted-foreground font-medium">{message.sender?.name}</span>}
 
         <div
           className={cn(
-            "max-w-xs lg:max-w-md px-4 py-2 rounded-2xl",
+            "max-w-xs lg:max-w-md px-4 py-2 rounded-2xl break-words",
             isOwnMessage ? "bg-primary text-primary-foreground" : "bg-muted",
           )}
         >
-          <ScrollArea className="max-h-32 w-full">
-            <p className="text-sm">{message.content}</p>
-          </ScrollArea>
+          <p className="text-sm">{message.content}</p>
         </div>
 
-        <div className="flex items-center gap-1">
-          <span className="text-xs text-muted-foreground">{message.timestamp}</span>
+        <div className="flex items-center gap-1 px-1">
+          <span className="text-xs text-muted-foreground">{new Date(message.created_at).toLocaleTimeString("fr-FR", { hour: '2-digit', minute: '2-digit' })}</span>
           {isOwnMessage && message.status && (
-            <Badge variant="secondary" className="text-xs">
-              {message.status === "read" ? "✓✓" : "✓"}
-            </Badge>
+            <div className="flex items-center text-xs text-muted-foreground">
+              {message.status === "sending" && <Loader2 className="h-3 w-3 animate-spin" />}
+              {message.status === "sent" && "✓"}
+              {message.status === "delivered" && "✓✓"}
+              {message.status === "read" && <span className="text-blue-500">✓✓</span>}
+            </div>
           )}
         </div>
       </div>
     </div>
   )
 }
+

@@ -1,18 +1,13 @@
-import { createClient } from "@supabase/supabase-js"
-import type { Database } from "./supabase"
+import { createBrowserClient } from '@supabase/ssr'
+import type { Database } from './supabase'
+ 
+export function createClient() {
+  // Create a supabase client on the browser with project's credentials
+  return createBrowserClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+}
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: true,
-  },
-  realtime: {
-    params: {
-      eventsPerSecond: 10,
-    },
-  },
-})
+// Export the supabase instance for compatibility
+export const supabase = createClient()
