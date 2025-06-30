@@ -1,8 +1,5 @@
 "use client"
 
-
-
-import { useState } from "react"
 import { ConversationList } from "@/components/conversation-list"
 import { ChatWindow } from "@/components/chat-window"
 import { ConversationDetails } from "@/components/conversation-details"
@@ -41,4 +38,3 @@ export function MessagingInterface() {
     </div>
   )
 }
-

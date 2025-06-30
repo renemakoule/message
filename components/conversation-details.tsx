@@ -1,49 +1,16 @@
 "use client"
 
-import { Phone, Video, UserPlus, Download, ImageIcon, FileText, Users, Loader2 } from "lucide-react"
+import { Phone, Video, UserPlus, Users, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useMessagingStore } from "@/lib/store"
-import { useUsers } from "@/hooks/use-users"
-import { supabase } from "@/lib/supabase-client"
-import { useEffect, useState } from "react"
+import { useConversationSettings } from "@/hooks/use-conversation-settings"
 
 export function ConversationDetails() {
   const { selectedConversation } = useMessagingStore()
-  const { users: allUsers, loading: usersLoading } = useUsers();
-  const [participants, setParticipants] = useState<any[]>([]);
-  const [loadingParticipants, setLoadingParticipants] = useState(true);
-
-  useEffect(() => {
-    const fetchParticipants = async () => {
-      if (!selectedConversation || selectedConversation.type !== 'group') {
-        setLoadingParticipants(false);
-        return;
-      }
-      setLoadingParticipants(true);
-      const { data, error } = await supabase
-        .from('conversation_participants')
-        .select('user_id')
-        .eq('conversation_id', selectedConversation.id);
-
-      if (error) {
-        console.error("Error fetching participants:", error);
-        setParticipants([]);
-      } else {
-        const participantDetails = data
-            .map(p => allUsers.find(u => u.id === p.user_id))
-            .filter(Boolean); // Filter out any undefined users
-        setParticipants(participantDetails);
-      }
-      setLoadingParticipants(false);
-    };
-
-    if (selectedConversation && allUsers.length > 0) {
-        fetchParticipants();
-    }
-  }, [selectedConversation, allUsers]);
+  const { participants, loadingParticipants } = useConversationSettings({ conversation: selectedConversation });
 
   if (!selectedConversation) return null
 
@@ -78,7 +45,7 @@ export function ConversationDetails() {
                 <Button variant="ghost" size="sm" className="gap-2"><UserPlus className="h-4 w-4" />Ajouter</Button>
               </div>
               <div className="space-y-3">
-                {loadingParticipants || usersLoading ? <Loader2 className="mx-auto my-4 h-6 w-6 animate-spin"/> : participants.map((member: any) => (
+                {loadingParticipants ? <Loader2 className="mx-auto my-4 h-6 w-6 animate-spin"/> : participants.map((member: any) => (
                   <div key={member.id} className="flex items-center gap-3">
                     <div className="relative">
                       <Avatar className="h-8 w-8"><AvatarImage src={member.avatar_url || "/placeholder.svg"} /><AvatarFallback>{member.name[0]}</AvatarFallback></Avatar>
@@ -97,4 +64,3 @@ export function ConversationDetails() {
     </div>
   )
 }
-

@@ -1,16 +1,11 @@
 "use client"
  
 import { useEffect, useState } from "react"
-import { AuthService } from "@/lib/auth"
-import type { User } from "@supabase/supabase-js"
-import type { Database } from "@/lib/supabase"
-import { useMessagingStore } from "@/lib/store" // <-- ADDED
- 
-type UserProfile = Database["public"]["Tables"]["users"]["Row"]
+import { AuthService, type AuthUser } from "@/lib/auth"
+import { useMessagingStore } from "@/lib/store"
  
 interface AuthState {
-  user: User | null
-  profile: UserProfile | null
+  user: AuthUser | null
   loading: boolean
   error: string | null
 }
@@ -18,32 +13,36 @@ interface AuthState {
 export function useAuth() {
   const [state, setState] = useState<AuthState>({
     user: null,
-    profile: null,
     loading: true,
     error: null,
   })
  
-  // Get setters from the Zustand store
-  const { setCurrentUser, setAuthenticated } = useMessagingStore() // <-- ADDED
+  const { setCurrentUser, setAuthenticated } = useMessagingStore()
  
   useEffect(() => {
-    // Get initial session
     const getInitialSession = async () => {
       try {
         const authUser = await AuthService.getCurrentUser()
         setState({
           user: authUser,
-          profile: authUser?.profile || null,
           loading: false,
           error: null,
         })
+        if (authUser) {
+          setCurrentUser(authUser.profile || null)
+          setAuthenticated(true)
+        } else {
+          setCurrentUser(null)
+          setAuthenticated(false)
+        }
       } catch (error) {
         setState({
           user: null,
-          profile: null,
           loading: false,
           error: error instanceof Error ? error.message : "Authentication error",
         })
+        setCurrentUser(null)
+        setAuthenticated(false)
       }
     }
  
@@ -52,31 +51,25 @@ export function useAuth() {
     // Listen to auth changes
     const {
       data: { subscription },
-    } = AuthService.onAuthStateChange(async (authUser) => {
+    } = AuthService.onAuthStateChange((authUser) => {
       setState({
         user: authUser,
-        profile: authUser?.profile || null,
         loading: false,
         error: null,
       })
+      if (authUser) {
+        setCurrentUser(authUser.profile || null)
+        setAuthenticated(true)
+      } else {
+        setCurrentUser(null)
+        setAuthenticated(false)
+      }
     })
  
     return () => {
       subscription.unsubscribe()
     }
-  }, [])
-  // ADDED: Effect to sync with Zustand store
-  useEffect(() => {
-    if (state.loading) return; // Wait until loading is finished
- 
-    if (state.user && state.profile) {
-      setCurrentUser(state.profile)
-      setAuthenticated(true)
-    } else {
-      setCurrentUser(null)
-      setAuthenticated(false)
-    }
-  }, [state.user, state.profile, state.loading, setCurrentUser, setAuthenticated])
+  }, [setCurrentUser, setAuthenticated])
  
  
   const signInWithGoogle = async () => {
@@ -84,11 +77,13 @@ export function useAuth() {
       setState((prev) => ({ ...prev, loading: true, error: null }))
       await AuthService.signInWithGoogle()
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Sign in failed";
       setState((prev) => ({
         ...prev,
         loading: false,
-        error: error instanceof Error ? error.message : "Sign in failed",
+        error: errorMessage,
       }))
+      throw new Error(errorMessage)
     }
   }
  
@@ -96,17 +91,23 @@ export function useAuth() {
     try {
       setState((prev) => ({ ...prev, loading: true, error: null }))
       await AuthService.signOut()
+      // The onAuthStateChange listener will handle setting the state
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Sign out failed";
       setState((prev) => ({
         ...prev,
         loading: false,
-        error: error instanceof Error ? error.message : "Sign out failed",
+        error: errorMessage,
       }))
+       throw new Error(errorMessage)
     }
   }
  
   return {
-    ...state,
+    user: state.user,
+    profile: state.user?.profile || null,
+    loading: state.loading,
+    error: state.error,
     signInWithGoogle,
     signOut,
   }

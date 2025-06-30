@@ -1,16 +1,12 @@
 "use client"
 
-import { useState } from "react"
-import { X, Search, Users, MessageCircle } from "lucide-react"
+import { X, Search, Users, MessageCircle, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Loader2 } from "lucide-react"
-import { useMessagingStore } from "@/lib/store"
-import { useUsers } from "@/hooks/use-users"
-import { useConversations } from "@/hooks/use-conversations"
+import { useNewConversation } from "@/hooks/use-new-conversation"
 
 interface NewConversationModalProps {
   onClose: () => void;
@@ -18,53 +14,26 @@ interface NewConversationModalProps {
 }
 
 export function NewConversationModal({ onClose, onConversationCreated }: NewConversationModalProps) {
-  const { currentUser } = useMessagingStore();
-  const { users, loading: usersLoading } = useUsers();
-  const { createPersonalConversation, createGroupConversation } = useConversations(currentUser?.id);
-
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
-  const [groupName, setGroupName] = useState("");
-  const [isCreating, setIsCreating] = useState(false);
-
-  const filteredUsers = (users || [])
-    .filter((user) => user.id !== currentUser?.id)
-    .filter((user) => user.name.toLowerCase().includes(searchQuery.toLowerCase()));
-
-  const handleCreatePrivateConversation = async (userId: string) => {
-    setIsCreating(true);
-    try {
-      await createPersonalConversation(userId);
+  const {
+    users,
+    usersLoading,
+    searchQuery,
+    setSearchQuery,
+    filteredUsers,
+    handleCreatePrivateConversation,
+    handleCreateGroup,
+    isCreating,
+    groupName,
+    setGroupName,
+    selectedUsers,
+    toggleUserSelection,
+  } = useNewConversation({
+    onSuccess: () => {
       onConversationCreated();
-    } catch (error) {
-      console.error("Failed to create private conversation:", error);
-    } finally {
-      setIsCreating(false);
       onClose();
     }
-  };
+  });
 
-  const handleCreateGroup = async () => {
-    if (groupName.trim() && selectedUsers.length > 0) {
-      setIsCreating(true);
-      try {
-        await createGroupConversation({
-          name: groupName,
-          participantIds: selectedUsers,
-        });
-        onConversationCreated();
-      } catch (error) {
-        console.error("Failed to create group:", error);
-      } finally {
-        setIsCreating(false);
-        onClose();
-      }
-    }
-  };
-
-  const toggleUserSelection = (userId: string) => {
-    setSelectedUsers((prev) => (prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]));
-  };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -133,4 +102,3 @@ export function NewConversationModal({ onClose, onConversationCreated }: NewConv
     </div>
   )
 }
-

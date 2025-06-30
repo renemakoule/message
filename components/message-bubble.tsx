@@ -67,4 +67,3 @@ export function MessageBubble({ message }: { message: any }) {
     </div>
   )
 }
-

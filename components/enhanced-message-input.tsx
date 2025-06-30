@@ -1,20 +1,22 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useRef } from "react"
 import { SendHorizontal, Paperclip, Smile, X, Camera, Video, FileText, ImageIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { useMessagingStore } from "@/lib/store"
 import EmojiPicker from "emoji-picker-react"
+import { toast } from "sonner"
+import { useMessages } from "@/hooks/use-messages" // <-- CORRECTION: Importer le bon hook
 
 interface EnhancedMessageInputProps {
   conversationId: string
 }
 
 export function EnhancedMessageInput({ conversationId }: EnhancedMessageInputProps) {
-  const { sendMessage } = useMessagingStore()
+  // CORRECTION: Utiliser le hook `useMessages` pour obtenir la fonction `sendMessage`
+  const { sendMessage } = useMessages(conversationId)
+
   const [messageText, setMessageText] = useState("")
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [showAttachmentModal, setShowAttachmentModal] = useState(false)
@@ -25,7 +27,7 @@ export function EnhancedMessageInput({ conversationId }: EnhancedMessageInputPro
 
   const handleSendMessage = () => {
     if (messageText.trim()) {
-      sendMessage(conversationId, messageText.trim())
+      sendMessage(messageText.trim())
       setMessageText("")
       if (textareaRef.current) {
         textareaRef.current.style.height = "auto"
@@ -91,12 +93,12 @@ export function EnhancedMessageInput({ conversationId }: EnhancedMessageInputPro
           // Ici vous pourriez ouvrir un modal de capture
           console.log(`Capture ${type} activée`, stream)
           // Pour la démo, on simule juste l'action
-          sendMessage(conversationId, `📷 ${type === "image" ? "Photo" : "Vidéo"} capturée`)
+          sendMessage(`📷 ${type === "image" ? "Photo" : "Vidéo"} capturée`)
           stream.getTracks().forEach((track) => track.stop())
         })
         .catch((err) => {
           console.error("Erreur accès caméra:", err)
-          alert("Impossible d'accéder à la caméra")
+          toast.error("Impossible d'accéder à la caméra.")
         })
     }
   }
@@ -104,8 +106,9 @@ export function EnhancedMessageInput({ conversationId }: EnhancedMessageInputPro
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: string) => {
     const file = e.target.files?.[0]
     if (file) {
-      // Simuler l'envoi du fichier
-      sendMessage(conversationId, `📎 ${file.name} (${type})`)
+      // Pour une vraie implémentation, il faudrait utiliser `sendMediaMessage` du hook useMessages
+      // Mais pour cette démo, on simule juste l'envoi du nom du fichier
+      sendMessage(`📎 ${file.name} (${type})`)
       e.target.value = "" // Reset input
     }
   }
@@ -117,7 +120,6 @@ export function EnhancedMessageInput({ conversationId }: EnhancedMessageInputPro
           {/* Zone de saisie principale */}
           <div className="flex items-end gap-3">
             
-
             {/* Textarea avec boutons intégrés */}
             <div className="flex-1 relative">
               <Textarea
@@ -133,14 +135,14 @@ export function EnhancedMessageInput({ conversationId }: EnhancedMessageInputPro
               {/* Boutons intégrés dans le textarea */}
               <div className="absolute right-3 bottom-3 flex items-center gap-2">
                 {/* Bouton d'attachement */}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="mb-1 flex-shrink-0"
-              onClick={() => setShowAttachmentModal(true)}
-            >
-              <Paperclip className="h-5 w-5" />
-            </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="mb-1 flex-shrink-0"
+                  onClick={() => setShowAttachmentModal(true)}
+                >
+                  <Paperclip className="h-5 w-5" />
+                </Button>
                 {/* Bouton emoji */}
                 <Button
                   variant="ghost"

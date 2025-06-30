@@ -23,7 +23,10 @@ type MobileScreen =
 
 export function MobileLayout() {
   const { currentUser, selectedConversation, setSelectedConversation, isCallActive } = useMessagingStore()
-  const { conversations, refetch } = useConversations(currentUser?.id); // Pour rafraîchir la liste
+  
+  // CORRECTION: On ne récupère que la fonction `refetch` du hook.
+  // La liste des conversations est maintenant lue par les composants enfants (comme ConversationList) directement depuis le store.
+  const { refetch } = useConversations(currentUser?.id);
 
   const [currentScreen, setCurrentScreen] = useState<MobileScreen>("conversations")
 
@@ -89,4 +92,3 @@ export function MobileLayout() {
     </div>
   )
 }
-

@@ -6,86 +6,86 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { useConversations } from "@/hooks/use-conversations"
 import { useMessagingStore } from "@/lib/store"
+import { toast } from "sonner"
+import { Loader2 } from "lucide-react"
 
 interface PublicGroupsModalProps {
   onClose: () => void
 }
 
 export function PublicGroupsModal({ onClose }: PublicGroupsModalProps) {
-  const { joinPublicGroup } = useMessagingStore()
-  const [searchQuery, setSearchQuery] = useState("")
+    const { currentUser } = useMessagingStore()
+    const { joinPublicGroup, refetch: refetchConversations } = useConversations(currentUser?.id)
+    const [searchQuery, setSearchQuery] = useState("")
+    const [loading, setLoading] = useState(false)
+    const [groups, setGroups] = useState<any[]>([]) // Vous devriez typer ceci correctement
+    const [isJoining, setIsJoining] = useState<string | null>(null);
 
-  // Groupes publics simulés
-  const publicGroups = [
-    {
-      id: "group1",
-      name: "Développeurs JavaScript",
-      description: "Communauté de développeurs JS pour partager des astuces et projets",
-      memberCount: 156,
-      avatar: "/placeholder.svg?height=40&width=40",
-      isPublic: true,
-      category: "Tech",
-    },
-    {
-      id: "group2",
-      name: "Photographes Amateurs",
-      description: "Partagez vos photos et recevez des conseils de la communauté",
-      memberCount: 89,
-      avatar: "/placeholder.svg?height=40&width=40",
-      isPublic: true,
-      category: "Art",
-    },
-    {
-      id: "group3",
-      name: "Cuisine du Monde",
-      description: "Recettes, astuces culinaires et découvertes gastronomiques",
-      memberCount: 234,
-      avatar: "/placeholder.svg?height=40&width=40",
-      isPublic: true,
-      category: "Lifestyle",
-    },
-    {
-      id: "group4",
-      name: "Fitness & Bien-être",
-      description: "Motivation, conseils fitness et partage d'expériences sportives",
-      memberCount: 178,
-      avatar: "/placeholder.svg?height=40&width=40",
-      isPublic: true,
-      category: "Sport",
-    },
-    {
-      id: "group5",
-      name: "Voyageurs",
-      description: "Conseils de voyage, bons plans et récits d'aventures",
-      memberCount: 312,
-      avatar: "/placeholder.svg?height=40&width=40",
-      isPublic: true,
-      category: "Voyage",
-    },
-  ]
+
+    // Simule la recherche de groupes publics. Remplacez par votre logique de fetch.
+    const publicGroups = [
+        {
+          id: "group1",
+          name: "Développeurs JavaScript",
+          description: "Communauté de développeurs JS pour partager des astuces et projets",
+          participant_count: 156,
+          avatar_url: "/placeholder.svg?height=40&width=40",
+          is_public: true,
+          category: "Tech",
+        },
+        {
+          id: "group2",
+          name: "Photographes Amateurs",
+          description: "Partagez vos photos et recevez des conseils de la communauté",
+          participant_count: 89,
+          avatar_url: "/placeholder.svg?height=40&width=40",
+          is_public: true,
+          category: "Art",
+        },
+        {
+          id: "group3",
+          name: "Cuisine du Monde",
+          description: "Recettes, astuces culinaires et découvertes gastronomiques",
+          participant_count: 234,
+          avatar_url: "/placeholder.svg?height=40&width=40",
+          is_public: true,
+          category: "Lifestyle",
+        },
+    ]
 
   const filteredGroups = publicGroups.filter(
     (group) =>
       group.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       group.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      group.category.toLowerCase().includes(searchQuery.toLowerCase()),
+      (group.category && group.category.toLowerCase().includes(searchQuery.toLowerCase())),
   )
 
-  const handleJoinGroup = (groupId: string) => {
-    joinPublicGroup(groupId)
-    onClose()
+  const handleJoinGroup = async (groupId: string) => {
+    setIsJoining(groupId);
+    try {
+        await joinPublicGroup(groupId);
+        await refetchConversations();
+        onClose();
+    } catch (error) {
+        // L'erreur est déjà gérée par le toast dans le hook
+        console.error(error);
+    } finally {
+        setIsJoining(null);
+    }
   }
 
   const getCategoryColor = (category: string) => {
-    const colors = {
+    const colors: { [key: string]: string } = {
       Tech: "bg-blue-100 text-blue-700",
       Art: "bg-purple-100 text-purple-700",
       Lifestyle: "bg-green-100 text-green-700",
       Sport: "bg-orange-100 text-orange-700",
       Voyage: "bg-indigo-100 text-indigo-700",
     }
-    return colors[category as keyof typeof colors] || "bg-gray-100 text-gray-700"
+    return colors[category] || "bg-gray-100 text-gray-700"
   }
 
   return (
@@ -117,7 +117,9 @@ export function PublicGroupsModal({ onClose }: PublicGroupsModalProps) {
 
         {/* Liste des groupes */}
         <div className="flex-1 overflow-y-auto p-6">
-          {filteredGroups.length === 0 ? (
+          {loading ? (
+             <div className="flex justify-center items-center h-full"><Loader2 className="h-8 w-8 animate-spin" /></div>
+          ) : filteredGroups.length === 0 ? (
             <div className="text-center py-12">
               <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
               <h3 className="font-medium text-gray-900 mb-2">Aucun groupe trouvé</h3>
@@ -131,7 +133,7 @@ export function PublicGroupsModal({ onClose }: PublicGroupsModalProps) {
                   className="flex items-start gap-4 p-4 border rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   <Avatar className="h-12 w-12 flex-shrink-0">
-                    <AvatarImage src={group.avatar || "/placeholder.svg"} />
+                    <AvatarImage src={group.avatar_url || "/placeholder.svg"} />
                     <AvatarFallback>{group.name[0]}</AvatarFallback>
                   </Avatar>
 
@@ -140,19 +142,27 @@ export function PublicGroupsModal({ onClose }: PublicGroupsModalProps) {
                       <div>
                         <div className="flex items-center gap-2 mb-1">
                           <h3 className="font-medium text-gray-900">{group.name}</h3>
-                          <Globe className="h-4 w-4 text-green-500" title="Groupe public" />
+                          {/* CORRECTION: Utilisation du composant Tooltip */}
+                          <Tooltip>
+                            <TooltipTrigger>
+                              <Globe className="h-4 w-4 text-green-500" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Groupe public</p>
+                            </TooltipContent>
+                          </Tooltip>
                         </div>
                         <div className="flex items-center gap-2 mb-2">
-                          <Badge variant="secondary" className={getCategoryColor(group.category)}>
+                           {group.category && <Badge variant="secondary" className={getCategoryColor(group.category)}>
                             {group.category}
-                          </Badge>
+                          </Badge>}
                           <span className="text-sm text-gray-500">
-                            {group.memberCount} membre{group.memberCount > 1 ? "s" : ""}
+                            {group.participant_count} membre{group.participant_count > 1 ? "s" : ""}
                           </span>
                         </div>
                       </div>
-                      <Button onClick={() => handleJoinGroup(group.id)} size="sm" className="flex-shrink-0">
-                        Rejoindre
+                      <Button onClick={() => handleJoinGroup(group.id)} size="sm" className="flex-shrink-0" disabled={isJoining === group.id}>
+                         {isJoining === group.id ? <Loader2 className="h-4 w-4 animate-spin"/> : "Rejoindre"}
                       </Button>
                     </div>
                     <p className="text-sm text-gray-600 line-clamp-2">{group.description}</p>

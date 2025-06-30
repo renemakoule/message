@@ -399,6 +399,7 @@ export interface Database {
         Args: {
           user_uuid: string
         }
+        // CORRECTION: Ajout des champs pour le participant
         Returns: {
           id: string
           name: string
@@ -413,6 +414,11 @@ export interface Database {
           last_message_at: string | null
           unread_count: number
           participant_count: number
+          // NOUVEAUX CHAMPS POUR LE PARTICIPANT
+          other_participant_id: string | null
+          other_participant_name: string | null
+          other_participant_avatar_url: string | null
+          other_participant_status: string | null
         }[]
       }
       get_existing_personal_conversation: {
@@ -434,8 +440,8 @@ export interface Database {
       }
       mark_messages_as_read: {
         Args: {
-          conversation_uuid: string
-          user_uuid: string
+          p_conversation_id: string
+          p_user_id: string
         }
         Returns: undefined
       }

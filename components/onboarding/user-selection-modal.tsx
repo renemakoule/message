@@ -10,6 +10,7 @@ import { useMessagingStore } from "@/lib/store"
 import { useUsers } from "@/hooks/use-users"
 import { useConversations } from "@/hooks/use-conversations"
 import type { Database } from "@/lib/supabase"
+import { toast } from "sonner"
 
 type UserProfile = Database["public"]["Tables"]["users"]["Row"];
 
@@ -43,14 +44,13 @@ export function UserSelectionModal({ onClose, onConversationCreated }: UserSelec
 
     try {
       await createPersonalConversation(selectedUser.id, inviteMessage.trim() || undefined);
+      toast.success(`Invitation envoyée à ${selectedUser.name}.`);
       onConversationCreated(); // Notifier le parent que la conversation est créée et qu'il faut rafraîchir
     } catch (error) {
       console.error("Failed to create conversation:", error);
-      // Ici, vous pourriez afficher une notification toast d'erreur à l'utilisateur
-      setIsCreating(false); // Assurez-vous de réinitialiser l'état de chargement en cas d'erreur
+      toast.error("Échec de la création de la conversation.");
+      setIsCreating(false); 
     }
-    // La fermeture de la modale est gérée par le parent après le rafraîchissement
-    // onClose(); // On pourrait le laisser au parent de décider
   }
 
   const getStatusColor = (status: string | null) => {
@@ -195,4 +195,3 @@ export function UserSelectionModal({ onClose, onConversationCreated }: UserSelec
     </div>
   )
 }
-

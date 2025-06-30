@@ -10,7 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { useMessagingStore } from "@/lib/store"
+import { useUserSettings } from "@/hooks/use-user-settings"
 
 interface SettingsModalProps {
   onClose: () => void
@@ -19,13 +19,12 @@ interface SettingsModalProps {
 type SettingsSection = "main" | "profile" | "privacy" | "notifications" | "chat" | "appearance" | "about"
 
 export function SettingsModal({ onClose }: SettingsModalProps) {
-  const { user, updateUserSettings } = useMessagingStore()
   const [currentSection, setCurrentSection] = useState<SettingsSection>("main")
-  const [profileData, setProfileData] = useState({
-    name: user?.name || "",
-    status: user?.status || "",
-    about: user?.about || "Disponible",
-  })
+  // CORRECTION: Utilisation de formData et setFormData au lieu de profileData et setProfileData
+  const { user, formData, setFormData, handleSave, handleAvatarChange, statusOptions } = useUserSettings({
+    onSuccess: onClose,
+  });
+
 
   const renderMainSettings = () => (
     <div className="space-y-1">
@@ -129,10 +128,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
       <div className="text-center">
         <div className="relative inline-block">
           <Avatar className="h-24 w-24">
-            <AvatarImage src={user?.avatar || "/placeholder.svg"} />
+            <AvatarImage src={user?.avatar_url || "/placeholder.svg"} />
             <AvatarFallback className="text-2xl">{user?.name?.[0]}</AvatarFallback>
           </Avatar>
-          <Button size="sm" className="absolute -bottom-2 -right-2 rounded-full w-8 h-8 p-0">
+          <Button size="sm" className="absolute -bottom-2 -right-2 rounded-full w-8 h-8 p-0" onClick={handleAvatarChange}>
             <Camera className="h-4 w-4" />
           </Button>
         </div>
@@ -145,8 +144,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
         <div className="relative">
           <Input
             id="name"
-            value={profileData.name}
-            onChange={(e) => setProfileData({ ...profileData, name: e.target.value })}
+            value={formData.name}
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             className="pr-10"
           />
           <Edit3 className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -162,8 +161,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
         <div className="relative">
           <Textarea
             id="about"
-            value={profileData.about}
-            onChange={(e) => setProfileData({ ...profileData, about: e.target.value })}
+            value={formData.about}
+            onChange={(e) => setFormData({ ...formData, about: e.target.value })}
             className="pr-10 min-h-[80px]"
             placeholder="Ajoutez quelques mots sur vous..."
           />
@@ -174,20 +173,21 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
       {/* Statut */}
       <div className="space-y-2">
         <Label>Statut</Label>
-        <Select value={profileData.status} onValueChange={(value) => setProfileData({ ...profileData, status: value })}>
+        <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
           <SelectTrigger>
             <SelectValue placeholder="Sélectionner un statut" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="available">🟢 Disponible</SelectItem>
-            <SelectItem value="busy">🔴 Occupé</SelectItem>
-            <SelectItem value="away">🟡 Absent</SelectItem>
-            <SelectItem value="invisible">⚫ Invisible</SelectItem>
+             {statusOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                <span className={option.color}>{option.label}</span>
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
 
-      <Button onClick={() => updateUserSettings(profileData)} className="w-full">
+      <Button onClick={handleSave} className="w-full">
         Enregistrer les modifications
       </Button>
     </div>

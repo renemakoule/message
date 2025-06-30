@@ -249,4 +249,3 @@ export function GroupCreationModal({ onClose }: GroupCreationModalProps) {
     </div>
   )
 }
-

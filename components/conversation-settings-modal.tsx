@@ -1,6 +1,5 @@
 "use client"
 
-import { useState } from "react"
 import { X, Users, Bell, Trash2, LogOut, Edit3, Camera, UserMinus, Crown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -20,24 +19,23 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import { useConversationSettings } from "@/hooks/use-conversation-settings"
 
 interface ConversationSettingsModalProps {
   conversation: any
   onClose: () => void
 }
 
-type SettingsSection = "main" | "members" | "media" | "notifications"
-
 export function ConversationSettingsModal({ conversation, onClose }: ConversationSettingsModalProps) {
-  const [currentSection, setCurrentSection] = useState<SettingsSection>("main")
-  const [groupName, setGroupName] = useState(conversation.name)
-
-  const mockMembers = [
-    { id: "1", name: "Alice Martin", avatar: "/placeholder.svg", isOnline: true, role: "admin" },
-    { id: "2", name: "Bob Dupont", avatar: "/placeholder.svg", isOnline: false, role: "member" },
-    { id: "3", name: "Claire Moreau", avatar: "/placeholder.svg", isOnline: true, role: "member" },
-    { id: "4", name: "David Leroy", avatar: "/placeholder.svg", isOnline: true, role: "member" },
-  ]
+  const {
+    currentSection,
+    setCurrentSection,
+    getSectionTitle,
+    groupName,
+    setGroupName,
+    participants,
+    loadingParticipants,
+  } = useConversationSettings({ conversation });
 
   const renderMainSettings = () => {
     if (conversation.type === "group") {
@@ -74,7 +72,7 @@ export function ConversationSettingsModal({ conversation, onClose }: Conversatio
           <div className="space-y-3">
             <Button variant="ghost" className="w-full justify-start gap-3" onClick={() => setCurrentSection("members")}>
               <Users className="h-5 w-5" />
-              Membres du groupe ({mockMembers.length})
+              Membres du groupe ({participants.length})
             </Button>
 
             <Button variant="ghost" className="w-full justify-start gap-3" onClick={() => setCurrentSection("media")}>
@@ -202,11 +200,11 @@ export function ConversationSettingsModal({ conversation, onClose }: Conversatio
           {/* Info du contact */}
           <div className="text-center">
             <Avatar className="h-24 w-24 mx-auto mb-4">
-              <AvatarImage src={conversation.avatar || "/placeholder.svg"} />
+              <AvatarImage src={conversation.avatar_url || "/placeholder.svg"} />
               <AvatarFallback className="text-2xl">{conversation.name[0]}</AvatarFallback>
             </Avatar>
             <h3 className="text-xl font-semibold">{conversation.name}</h3>
-            <p className="text-gray-500">{conversation.isOnline ? "En ligne" : "Hors ligne"}</p>
+            <p className="text-gray-500">{"Détails"}</p>
           </div>
 
           {/* Actions rapides */}
@@ -295,19 +293,19 @@ export function ConversationSettingsModal({ conversation, onClose }: Conversatio
   const renderMembersSettings = () => (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="font-medium">Membres ({mockMembers.length})</h3>
+        <h3 className="font-medium">Membres ({participants.length})</h3>
         <Button size="sm">Ajouter</Button>
       </div>
 
       <div className="space-y-3">
-        {mockMembers.map((member) => (
+        {participants.map((member: any) => (
           <div key={member.id} className="flex items-center gap-3 p-3 rounded-lg border">
             <div className="relative">
               <Avatar className="h-12 w-12">
-                <AvatarImage src={member.avatar || "/placeholder.svg"} />
+                <AvatarImage src={member.avatar_url || "/placeholder.svg"} />
                 <AvatarFallback>{member.name[0]}</AvatarFallback>
               </Avatar>
-              {member.isOnline && (
+              {member.status === 'online' && (
                 <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-white rounded-full" />
               )}
             </div>
@@ -318,7 +316,7 @@ export function ConversationSettingsModal({ conversation, onClose }: Conversatio
                 {member.role === "admin" && <Crown className="h-4 w-4 text-yellow-500" />}
               </div>
               <p className="text-sm text-gray-500">
-                {member.role === "admin" ? "Administrateur" : "Membre"} • {member.isOnline ? "En ligne" : "Hors ligne"}
+                {member.role === "admin" ? "Administrateur" : "Membre"} • {member.status === 'online' ? "En ligne" : "Hors ligne"}
               </p>
             </div>
 
@@ -405,19 +403,6 @@ export function ConversationSettingsModal({ conversation, onClose }: Conversatio
       </div>
     </div>
   )
-
-  const getSectionTitle = () => {
-    switch (currentSection) {
-      case "members":
-        return "Membres"
-      case "media":
-        return "Médias"
-      case "notifications":
-        return "Notifications"
-      default:
-        return conversation.type === "group" ? "Paramètres du groupe" : "Paramètres de la conversation"
-    }
-  }
 
   const renderCurrentSection = () => {
     switch (currentSection) {

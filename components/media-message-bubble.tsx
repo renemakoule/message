@@ -120,4 +120,3 @@ export function MediaMessageBubble({ message }: { message: any }) {
     </>
   )
 }
-

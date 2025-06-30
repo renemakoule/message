@@ -6,9 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Checkbox } from "@/components/ui/checkbox"
-import { useMessagingStore } from "@/lib/store"
-import { useUsers } from "@/hooks/use-users"
-import { useConversations } from "@/hooks/use-conversations"
+import { useNewConversation } from "@/hooks/use-new-conversation"
 
 interface MobileNewConversationProps {
   onBack: () => void;
@@ -16,37 +14,24 @@ interface MobileNewConversationProps {
 }
 
 export function MobileNewConversation({ onBack, onConversationCreated }: MobileNewConversationProps) {
-  const { currentUser } = useMessagingStore();
-  const { users, loading: usersLoading } = useUsers();
-  const { createPersonalConversation, createGroupConversation } = useConversations(currentUser?.id);
+  const {
+    users,
+    usersLoading,
+    searchQuery,
+    setSearchQuery,
+    filteredUsers,
+    handleCreatePrivateConversation,
+    handleCreateGroup,
+    isCreating,
+    groupName,
+    setGroupName,
+    selectedUsers,
+    toggleUserSelection,
+  } = useNewConversation({
+    onSuccess: onConversationCreated
+  });
 
   const [currentStep, setCurrentStep] = useState<"choice" | "private" | "group-members" | "group-details">("choice")
-  const [searchQuery, setSearchQuery] = useState("")
-  const [selectedUsers, setSelectedUsers] = useState<string[]>([])
-  const [groupName, setGroupName] = useState("")
-  const [isCreating, setIsCreating] = useState(false);
-
-  const filteredUsers = (users || [])
-    .filter(user => user.id !== currentUser?.id)
-    .filter(user => user.name.toLowerCase().includes(searchQuery.toLowerCase()));
-
-  const handleCreatePrivateConversation = async (userId: string) => {
-    setIsCreating(true);
-    await createPersonalConversation(userId);
-    onConversationCreated();
-  }
-
-  const handleCreateGroup = async () => {
-    if (groupName.trim() && selectedUsers.length > 0) {
-      setIsCreating(true);
-      await createGroupConversation({ name: groupName, participantIds: selectedUsers });
-      onConversationCreated();
-    }
-  }
-
-  const toggleUserSelection = (userId: string) => {
-    setSelectedUsers((prev) => (prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]))
-  }
 
   const getStepTitle = () => {
     switch (currentStep) {
@@ -114,4 +99,3 @@ export function MobileNewConversation({ onBack, onConversationCreated }: MobileN
     </div>
   )
 }
-

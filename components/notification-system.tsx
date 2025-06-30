@@ -4,7 +4,7 @@ import React, { useState } from "react"
 import { Bell, X, MessageCircle, Phone, Check, UserX } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { useMessagingStore } from "@/lib/store"
+import { useMessagingStore, type Conversation } from "@/lib/store" // <-- Import du type Conversation
 import { useInvitations } from "@/hooks/use-invitations"
 import { useConversations } from "@/hooks/use-conversations"
 import type { Database } from "@/lib/supabase"
@@ -22,9 +22,12 @@ export function NotificationSystem({ onNotificationClick }: NotificationSystemPr
     notifications,
     markNotificationAsRead,
     clearAllNotifications,
+    // CORRECTION: On lit la liste des conversations directement depuis le store
+    conversations,
   } = useMessagingStore();
   
-  const { conversations, refetch: refetchConversations } = useConversations(currentUser?.id);
+  // Le hook est toujours utilisé pour l'action `refetch`
+  const { refetch: refetchConversations } = useConversations(currentUser?.id);
   const { invitations, acceptInvitation, declineInvitation, refetch: refetchInvitations } = useInvitations(currentUser?.id);
 
   const [showNotifications, setShowNotifications] = useState(false);
@@ -50,12 +53,13 @@ export function NotificationSystem({ onNotificationClick }: NotificationSystemPr
       onNotificationClick(notification);
     } else if (notification.data && (notification.data as any).conversation_id) {
       const convId = (notification.data as any).conversation_id;
+      // Le type de 'c' est maintenant correctement inféré comme 'Conversation'
       const conversation = conversations.find((c) => c.id === convId);
       if (conversation) {
         setSelectedConversation(conversation);
       }
     }
-        setShowNotifications(false);
+    setShowNotifications(false);
   };
 
   const allDisplayItems = [
@@ -114,7 +118,7 @@ function timeAgo(date: Date | string) {
     if (hours < 24) return `Il y a ${hours} h`;
     const days = Math.floor(hours / 24);
     return `Il y a ${days} j`;
-  };
+};
 
 function NotificationItem({ notification, onClick }: { notification: Notification, onClick: () => void }) {
   return (
@@ -148,4 +152,3 @@ function InvitationItem({ invitation, onAccept, onDecline }: { invitation: any, 
     </div>
     );
 }
-

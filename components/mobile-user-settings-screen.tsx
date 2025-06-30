@@ -1,6 +1,5 @@
 "use client"
 
-import { useState } from "react"
 import { ArrowLeft, Camera, Edit3, Phone, Mail, MapPin, Calendar, Globe } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,51 +8,16 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { useMessagingStore } from "@/lib/store"
+import { useUserSettings } from "@/hooks/use-user-settings"
 
 interface MobileUserSettingsScreenProps {
   onBack: () => void
 }
 
 export function MobileUserSettingsScreen({ onBack }: MobileUserSettingsScreenProps) {
-  const { user, updateUserSettings } = useMessagingStore()
-  const [formData, setFormData] = useState({
-    name: user?.name || "",
-    about: user?.about || "Disponible",
-    status: user?.status || "available",
-    phone: user?.phone || "",
-    email: user?.email || "",
-    location: user?.location || "",
-    birthday: user?.birthday || "",
-    website: user?.website || "",
+  const { user, formData, setFormData, handleSave, handleAvatarChange, statusOptions } = useUserSettings({
+    onSuccess: onBack,
   })
-
-  const handleSave = () => {
-    updateUserSettings(formData)
-    onBack()
-  }
-
-  const handleAvatarChange = () => {
-    // Simuler le changement d'avatar
-    const input = document.createElement("input")
-    input.type = "file"
-    input.accept = "image/*"
-    input.onchange = (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0]
-      if (file) {
-        console.log("Nouvelle photo sélectionnée:", file.name)
-        updateUserSettings({ avatar: URL.createObjectURL(file) })
-      }
-    }
-    input.click()
-  }
-
-  const statusOptions = [
-    { value: "available", label: "🟢 Disponible", color: "text-green-600" },
-    { value: "busy", label: "🔴 Occupé", color: "text-red-600" },
-    { value: "away", label: "🟡 Absent", color: "text-yellow-600" },
-    { value: "invisible", label: "⚫ Invisible", color: "text-gray-600" },
-  ]
 
   return (
     <div className="flex flex-col h-full bg-white">
@@ -77,7 +41,7 @@ export function MobileUserSettingsScreen({ onBack }: MobileUserSettingsScreenPro
           <div className="text-center">
             <div className="relative inline-block">
               <Avatar className="h-24 w-24">
-                <AvatarImage src={user?.avatar || "/placeholder.svg"} />
+                <AvatarImage src={user?.avatar_url || "/placeholder.svg"} />
                 <AvatarFallback className="text-2xl">{user?.name?.[0]}</AvatarFallback>
               </Avatar>
               <Button

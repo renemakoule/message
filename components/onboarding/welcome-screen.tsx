@@ -124,4 +124,3 @@ export function WelcomeScreen({ onConversationCreated }: { onConversationCreated
     </div>
   )
 }
-

@@ -19,6 +19,12 @@ export function ActionMenu({ variant = "button", className }: ActionMenuProps) {
   const [showGroupCreation, setShowGroupCreation] = useState(false)
   const [showPublicGroups, setShowPublicGroups] = useState(false)
 
+  // Le callback onConversationCreated est vide ici car ce menu est utilisé
+  // dans un contexte où le rafraîchissement est géré par des abonnements temps réel.
+  const handleConversationCreated = () => {
+    setShowUserSelection(false);
+  }
+
   if (variant === "dropdown") {
     return (
       <>
@@ -46,7 +52,7 @@ export function ActionMenu({ variant = "button", className }: ActionMenuProps) {
         </DropdownMenu>
 
         {/* Modales */}
-        {showUserSelection && <UserSelectionModal onClose={() => setShowUserSelection(false)} />}
+        {showUserSelection && <UserSelectionModal onClose={() => setShowUserSelection(false)} onConversationCreated={handleConversationCreated} />}
         {showGroupCreation && <GroupCreationModal onClose={() => setShowGroupCreation(false)} />}
         {showPublicGroups && <PublicGroupsModal onClose={() => setShowPublicGroups(false)} />}
       </>
@@ -61,7 +67,7 @@ export function ActionMenu({ variant = "button", className }: ActionMenuProps) {
       </Button>
 
       {/* Modales */}
-      {showUserSelection && <UserSelectionModal onClose={() => setShowUserSelection(false)} />}
+      {showUserSelection && <UserSelectionModal onClose={() => setShowUserSelection(false)} onConversationCreated={handleConversationCreated} />}
       {showGroupCreation && <GroupCreationModal onClose={() => setShowGroupCreation(false)} />}
       {showPublicGroups && <PublicGroupsModal onClose={() => setShowPublicGroups(false)} />}
     </>

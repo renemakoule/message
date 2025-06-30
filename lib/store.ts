@@ -1,55 +1,47 @@
 "use client"
 
-// -----------------------------------------------------------------------------
-// IMPORTS ET CLIENT SUPABASE
-// -----------------------------------------------------------------------------
-
 import { create } from "zustand"
 import { supabase } from "./supabase-client"
 import type { Database } from "./supabase"
 
-// -----------------------------------------------------------------------------
-// TYPES DE DONNÉES
-// -----------------------------------------------------------------------------
-
 type UserProfile = Database["public"]["Tables"]["users"]["Row"]
-type Conversation = Database["public"]["Functions"]["get_conversations_with_last_message"]["Returns"][0]
+export type Conversation = Database["public"]["Functions"]["get_conversations_with_last_message"]["Returns"][0]
 type Notification = Database["public"]["Tables"]["notifications"]["Row"]
-
-/**
- * Représente l'état d'un appel en cours.
- */
-type Call = {
-  conversationId: string
-  type: "audio" | "video"
-  status: "ringing" | "active" // L'appel sonne ou est actif
-  participant: {
-    id: string
-    name: string
-    avatar?: string | null
-  }
+export type Message = Database["public"]["Tables"]["messages"]["Row"] & { 
+    sender: UserProfile;
+    status?: 'sending' | 'sent' | 'delivered' | 'read';
 }
 
-// -----------------------------------------------------------------------------
-// INTERFACE DU STORE ZUSTAND
-// -----------------------------------------------------------------------------
+// ... (autres types comme Call, TypingUser)
+type Call = { conversationId: string; type: "audio" | "video"; status: "ringing" | "active"; participant: { id: string; name: string; avatar?: string | null; } }
+type TypingUser = { conversationId: string; userId: string; userName: string; }
 
-/**
- * Interface définissant l'état et les actions pour la gestion de la messagerie.
- */
 interface MessagingStore {
-  // --- État Global de l'UI ---
+  // --- État ---
   currentUser: UserProfile | null
   isAuthenticated: boolean
+  conversations: Conversation[] // <-- On ajoute la liste des conversations au store
   selectedConversation: Conversation | null
+  messages: Message[]
   isCallActive: boolean
   currentCall: Call | null
   notifications: Notification[]
+  typingUsers: TypingUser[]
+  refetchConversationsTrigger: number // <-- NOUVEAU: Déclencheur pour rafraîchir la liste
 
-  // --- Actions pour modifier l'état ---
+  // --- Actions ---
   setCurrentUser: (user: UserProfile | null) => void
   setAuthenticated: (isAuth: boolean) => void
+  setConversations: (conversations: Conversation[]) => void // <-- NOUVEAU
+  refetchConversations: () => void // <-- NOUVEAU
   setSelectedConversation: (conversation: Conversation | null) => void
+  setMessages: (messages: Message[]) => void
+  addMessage: (message: Message) => void
+  updateMessage: (tempId: string, finalMessage: Message) => void
+  removeMessage: (messageId: string) => void
+  // ... (autres actions)
+  joinPublicGroup: (groupId: string) => void;
+  updateUserSettings: (settings: Partial<UserProfile>) => void;
   startCall: (conversationId: string, type: "audio" | "video") => void
   endCall: () => void
   setNotifications: (notifications: Notification[]) => void
@@ -58,32 +50,59 @@ interface MessagingStore {
   clearAllNotifications: () => void
 }
 
-// -----------------------------------------------------------------------------
-// STORE ZUSTAND (`useMessagingStore`)
-// -----------------------------------------------------------------------------
-
-/**
- * Hook Zustand pour accéder et gérer l'état global de l'application de messagerie.
- */
 export const useMessagingStore = create<MessagingStore>((set, get) => ({
   // --- État initial ---
   currentUser: null,
   isAuthenticated: false,
+  conversations: [], // <-- Initialisé
   selectedConversation: null,
+  messages: [],
   isCallActive: false,
   currentCall: null,
   notifications: [],
+  typingUsers: [],
+  refetchConversationsTrigger: 0, // <-- Initialisé
 
   // --- Actions ---
-
   setCurrentUser: (user) => set({ currentUser: user }),
-
   setAuthenticated: (isAuth) => set({ isAuthenticated: isAuth }),
-
+  
+  setConversations: (conversations) => set({ conversations }),
+  refetchConversations: () => set((state) => ({ refetchConversationsTrigger: state.refetchConversationsTrigger + 1 })),
+  
   setSelectedConversation: (conversation) => {
-    set({ selectedConversation: conversation })
+    set({ selectedConversation: conversation, messages: [] });
+    
+    // Priorité n°2: Mise à jour optimiste du compteur de non-lus
+    if (conversation && conversation.unread_count > 0) {
+        set(state => ({
+            conversations: state.conversations.map(c => 
+                c.id === conversation.id ? { ...c, unread_count: 0 } : c
+            )
+        }));
+    }
   },
-
+  
+  // Actions pour les messages
+  setMessages: (messages) => set({ messages }),
+  addMessage: (message) => set((state) => {
+      if (state.messages.some(m => m.id === message.id)) return {};
+      return { messages: [...state.messages, message] };
+  }),
+  updateMessage: (tempId, finalMessage) => set((state) => ({
+      messages: state.messages.map(m => m.id === tempId ? finalMessage : m)
+  })),
+  removeMessage: (messageId) => set((state) => ({
+      messages: state.messages.filter(m => m.id !== messageId)
+  })),
+  
+  // Reste des actions...
+  joinPublicGroup: (groupId: string) => { console.log(`Joining public group ${groupId}`); },
+  updateUserSettings: (settings) => {
+    set((state) => ({
+      currentUser: state.currentUser ? { ...state.currentUser, ...settings } : null,
+    }));
+  },
   startCall: (conversationId, type) => {
     const { selectedConversation } = get()
     if (!selectedConversation) return
@@ -101,93 +120,43 @@ export const useMessagingStore = create<MessagingStore>((set, get) => ({
         },
       },
     })
-
-    // Simule la connexion de l'appel après quelques secondes
     setTimeout(() => {
       set((state) =>
         state.currentCall ? { ...state, currentCall: { ...state.currentCall, status: "active" } } : state,
       )
     }, 3000)
   },
-
   endCall: () => set({ isCallActive: false, currentCall: null }),
-
-  // Actions pour les notifications
   setNotifications: (notifications) => set({ notifications }),
-
-  addNotification: (notification) =>
-    set((state) => ({
-      // Ajoute la nouvelle notification au début et limite le tableau à 50 notifications
-      notifications: [notification, ...state.notifications].slice(0, 50),
-    })),
-
+  addNotification: (notification) => set((state) => ({ notifications: [notification, ...state.notifications].slice(0, 50) })),
   markNotificationAsRead: (notificationId) => {
-    // Mise à jour optimiste de l'UI
     set((state) => ({
       notifications: state.notifications.map((n) =>
         n.id === notificationId ? { ...n, read: true } : n,
       ),
     }))
-    // Met à jour le backend en arrière-plan sans bloquer l'UI
-    supabase
-      .from("notifications")
-      .update({ read: true })
-      .eq("id", notificationId)
-      .then(({ error }) => {
+    supabase.from("notifications").update({ read: true }).eq("id", notificationId).then(({ error }) => {
         if (error) console.error("Failed to mark notification as read:", error)
-      })
+    })
   },
-
   clearAllNotifications: () => {
     const userId = get().currentUser?.id
     if (!userId) return
-
-    // Mise à jour optimiste de l'UI
     set({ notifications: [] })
-
-    // Supprime toutes les notifications pour l'utilisateur dans le backend
-    supabase
-      .from("notifications")
-      .delete()
-      .eq("user_id", userId)
-      .then(({ error }) => {
+    supabase.from("notifications").delete().eq("user_id", userId).then(({ error }) => {
         if (error) console.error("Failed to clear notifications:", error)
-      })
+    })
   },
 }))
 
-// -----------------------------------------------------------------------------
-// FONCTIONS UTILITAIRES
-// -----------------------------------------------------------------------------
-
-/**
- * Télécharge un fichier vers Supabase Storage.
- * @param file Le fichier à télécharger.
- * @param bucket Le nom du bucket de stockage. Par défaut, 'media'.
- * @param userId L'ID de l'utilisateur qui télécharge, pour l'organisation des fichiers.
- * @returns L'URL publique du fichier téléchargé.
- */
+// ... (fonction uploadMedia inchangée)
 export async function uploadMedia(file: File, bucket: string = "media", userId: string): Promise<string> {
-  if (!userId) {
-    throw new Error("User ID is required to upload media.")
-  }
-
-  const fileExt = file.name.split(".").pop()
-  // Crée un chemin de fichier unique pour éviter les collisions de noms
-  const filePath = `${userId}/${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`
-
-  const { error: uploadError } = await supabase.storage.from(bucket).upload(filePath, file)
-
-  if (uploadError) {
-    console.error("Error uploading file to Supabase Storage:", uploadError)
-    throw uploadError
-  }
-
-  const { data } = supabase.storage.from(bucket).getPublicUrl(filePath)
-
-  if (!data.publicUrl) {
-    throw new Error("Could not get public URL for the uploaded file.")
-  }
-
-  return data.publicUrl
+    if (!userId) { throw new Error("User ID is required to upload media.") }
+    const fileExt = file.name.split(".").pop();
+    const filePath = `${userId}/${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`;
+    const { error: uploadError } = await supabase.storage.from(bucket).upload(filePath, file);
+    if (uploadError) { throw uploadError; }
+    const { data } = supabase.storage.from(bucket).getPublicUrl(filePath);
+    if (!data.publicUrl) { throw new Error("Could not get public URL for the uploaded file."); }
+    return data.publicUrl;
 }

@@ -1,8 +1,10 @@
 "use client"
 
-import { ArrowLeft, Phone, Video, UserPlus, Download, ImageIcon, FileText } from "lucide-react"
+import { ArrowLeft, Phone, Video, UserPlus, Download, ImageIcon, FileText, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { useConversationSettings } from "@/hooks/use-conversation-settings"
+
 
 interface MobileConversationDetailsProps {
   conversation: any
@@ -10,11 +12,7 @@ interface MobileConversationDetailsProps {
 }
 
 export function MobileConversationDetails({ conversation, onBack }: MobileConversationDetailsProps) {
-  const mockMembers = [
-    { id: 1, name: "Alice Martin", avatar: "/placeholder.svg?height=32&width=32", isOnline: true },
-    { id: 2, name: "Bob Dupont", avatar: "/placeholder.svg?height=32&width=32", isOnline: false },
-    { id: 3, name: "Claire Moreau", avatar: "/placeholder.svg?height=32&width=32", isOnline: true },
-  ]
+  const { participants, loadingParticipants } = useConversationSettings({ conversation });
 
   const mockAttachments = [
     { id: 1, name: "presentation.pdf", size: "2.4 MB", type: "pdf", date: "Hier" },
@@ -36,17 +34,14 @@ export function MobileConversationDetails({ conversation, onBack }: MobileConver
         {/* Profil principal */}
         <div className="p-6 text-center border-b">
           <Avatar className="h-24 w-24 mx-auto mb-4">
-            <AvatarImage src={conversation.avatar || "/placeholder.svg"} />
+            <AvatarImage src={conversation.avatar_url || "/placeholder.svg"} />
             <AvatarFallback className="text-3xl">{conversation.name[0]}</AvatarFallback>
           </Avatar>
           <h2 className="text-xl font-semibold mb-2">{conversation.name}</h2>
           {conversation.type === "group" ? (
-            <p className="text-gray-500">{conversation.memberCount} membres</p>
+            <p className="text-gray-500">{conversation.participant_count} membres</p>
           ) : (
-            <div className="flex items-center justify-center gap-2">
-              <div className={`w-2 h-2 rounded-full ${conversation.isOnline ? "bg-green-500" : "bg-gray-400"}`} />
-              <span className="text-gray-500">{conversation.isOnline ? "En ligne" : "Hors ligne"}</span>
-            </div>
+            <p className="text-gray-500">Conversation privée</p>
           )}
         </div>
 
@@ -76,20 +71,22 @@ export function MobileConversationDetails({ conversation, onBack }: MobileConver
             </div>
 
             <div className="space-y-4">
-              {mockMembers.map((member) => (
+              {loadingParticipants ? (
+                <div className="flex justify-center items-center py-4"><Loader2 className="h-6 w-6 animate-spin"/></div>
+              ) : participants.map((member: any) => (
                 <div key={member.id} className="flex items-center gap-4">
                   <div className="relative">
                     <Avatar className="h-12 w-12">
-                      <AvatarImage src={member.avatar || "/placeholder.svg"} />
+                      <AvatarImage src={member.avatar_url || "/placeholder.svg"} />
                       <AvatarFallback>{member.name[0]}</AvatarFallback>
                     </Avatar>
-                    {member.isOnline && (
+                    {member.status === 'online' && (
                       <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-white rounded-full" />
                     )}
                   </div>
                   <div className="flex-1">
                     <p className="font-medium">{member.name}</p>
-                    <p className="text-sm text-gray-500">{member.isOnline ? "En ligne" : "Hors ligne"}</p>
+                    <p className="text-sm text-gray-500">{member.status === 'online' ? "En ligne" : "Hors ligne"}</p>
                   </div>
                   <div className="flex gap-2">
                     <Button variant="ghost" size="sm" className="p-2">

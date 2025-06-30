@@ -23,6 +23,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { useMessages } from "@/hooks/use-messages"
 import { useAuth } from "@/hooks/use-auth"
 import EmojiPicker from "emoji-picker-react"
+import { toast } from "sonner"
 
 interface MediaPreview {
   file: File
@@ -58,7 +59,7 @@ export function V0StyleMessageInput({ conversationId }: V0StyleMessageInputProps
         await sendMediaMessage(mediaPreview.file, messageText.trim(), mediaPreview.type)
       } catch (error) {
         console.error("Failed to send media message:", error)
-        // Optionally show a toast error to the user
+        toast.error("Échec de l'envoi du média.")
       } finally {
         removeMediaPreview()
         setMessageText("")
@@ -69,6 +70,7 @@ export function V0StyleMessageInput({ conversationId }: V0StyleMessageInputProps
         setMessageText("")
       } catch (error) {
         console.error("Failed to send message:", error)
+        toast.error("Échec de l'envoi du message.")
       }
     }
   }
@@ -238,4 +240,3 @@ export function V0StyleMessageInput({ conversationId }: V0StyleMessageInputProps
     </>
   )
 }
-

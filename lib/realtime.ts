@@ -217,4 +217,3 @@ export class RealtimeService {
     this.channels.clear()
   }
 }
-

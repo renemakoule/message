@@ -7,18 +7,18 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useMessagingStore } from "@/lib/store"
 import { useMessages } from "@/hooks/use-messages"
-import { useAuth } from "@/hooks/use-auth"
 import { MessageBubble } from "@/components/message-bubble"
 import { V0StyleMessageInput } from "@/components/v0-style-message-input"
 import { ConversationSettingsModal } from "@/components/conversation-settings-modal"
 import { EnhancedNotificationSystem } from "@/components/enhanced-notification-system"
-import { TypingIndicator } from "@/components/typing-indicator"
 import { cn } from "@/lib/utils"
 
 export function ChatWindow() {
-  const { currentUser } = useMessagingStore();
-  const { selectedConversation, startCall } = useMessagingStore()
-  const { messages, loading: messagesLoading, error } = useMessages(selectedConversation?.id, currentUser?.id)
+  // On récupère les messages directement depuis le store
+  const { currentUser, selectedConversation, startCall, messages } = useMessagingStore()
+  
+  // Le hook useMessages gère désormais le chargement et le temps réel en arrière-plan
+  const { loading: messagesLoading, error } = useMessages(selectedConversation?.id, currentUser?.id)
 
   const [showSettings, setShowSettings] = useState(false)
   const [showScrollButton, setShowScrollButton] = useState(false)
@@ -72,13 +72,9 @@ export function ChatWindow() {
     const yesterday = new Date(today)
     yesterday.setDate(yesterday.getDate() - 1)
 
-    if (date.toDateString() === today.toDateString()) {
-      return "Aujourd'hui"
-    } else if (date.toDateString() === yesterday.toDateString()) {
-      return "Hier"
-    } else {
-      return date.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })
-    }
+    if (date.toDateString() === today.toDateString()) return "Aujourd'hui"
+    if (date.toDateString() === yesterday.toDateString()) return "Hier"
+    return date.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })
   }
 
   if (!selectedConversation) {
@@ -122,20 +118,10 @@ export function ChatWindow() {
         </div>
         <div className="flex items-center gap-2">
           <EnhancedNotificationSystem />
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => startCall(selectedConversation.id, "audio")}
-            className="hover:bg-green-100 hover:text-green-600 transition-colors"
-          >
+          <Button variant="ghost" size="icon" onClick={() => startCall(selectedConversation.id, "audio")} className="hover:bg-green-100 hover:text-green-600 transition-colors">
             <Phone className="h-4 w-4" />
           </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => startCall(selectedConversation.id, "video")}
-            className="hover:bg-blue-100 hover:text-blue-600 transition-colors"
-          >
+          <Button variant="ghost" size="icon" onClick={() => startCall(selectedConversation.id, "video")} className="hover:bg-blue-100 hover:text-blue-600 transition-colors">
             <Video className="h-4 w-4" />
           </Button>
           <DropdownMenu>
@@ -176,18 +162,13 @@ export function ChatWindow() {
               </div>
             ))
           )}
-          {/* <TypingIndicator /> */}
           <div ref={messagesEndRef} className="h-1" />
         </div>
       </div>
 
       {showScrollButton && (
         <div className="absolute bottom-24 right-6 z-20">
-          <Button
-            onClick={scrollToBottom}
-            size="icon"
-            className="h-12 w-12 rounded-full shadow-lg bg-primary hover:bg-primary/90 text-primary-foreground"
-          >
+          <Button onClick={scrollToBottom} size="icon" className="h-12 w-12 rounded-full shadow-lg bg-primary hover:bg-primary/90 text-primary-foreground">
             <ChevronDown className="h-5 w-5" />
           </Button>
         </div>
@@ -203,4 +184,3 @@ export function ChatWindow() {
     </div>
   )
 }
-
