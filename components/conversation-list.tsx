@@ -17,9 +17,7 @@ import { ActionMenu } from "@/components/navigation/action-menu"
 import { cn } from "@/lib/utils"
 
 export function ConversationList() {
-  // On récupère les conversations et le déclencheur depuis le store
   const { currentUser, selectedConversation, setSelectedConversation, conversations } = useMessagingStore()
-  // Le hook useConversations gère maintenant le chargement et le rafraîchissement
   const { loading: conversationsLoading, error, refetch } = useConversations(currentUser?.id)
 
   const [searchQuery, setSearchQuery] = useState("")
@@ -45,7 +43,7 @@ export function ConversationList() {
   }
 
   const filteredConversations = (conversations || []).filter((conv) =>
-    conv.name.toLowerCase().includes(searchQuery.toLowerCase()),
+    (conv.name || '').toLowerCase().includes(searchQuery.toLowerCase()),
   )
 
   const groupConversations = filteredConversations.filter((conv) => conv.type === "group")
@@ -70,7 +68,7 @@ export function ConversationList() {
           </DropdownMenu>
           <h1 className="font-semibold text-foreground">Messages</h1>
         </div>
-        <ActionMenu variant="button" />
+        <ActionMenu variant="dropdown" />
       </div>
 
       <div className="p-4 border-b border-border bg-card">
@@ -94,12 +92,12 @@ export function ConversationList() {
   )
 }
 
-function ConversationSection({ title, conversations, selectedConversation, onSelectConversation }: any) {
+function ConversationSection({ title, conversations, selectedConversation, onSelectConversation }: { title: string, conversations: Conversation[], selectedConversation: Conversation | null, onSelectConversation: (c: Conversation) => void }) {
   return (
     <div>
       <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3 px-2">{title} ({conversations.length})</h3>
       <div className="space-y-1">
-        {conversations.map((conversation: Conversation) => (
+        {conversations.map((conversation) => (
           <ConversationItem key={conversation.id} conversation={conversation} isSelected={selectedConversation?.id === conversation.id} onClick={() => onSelectConversation(conversation)} />
         ))}
       </div>
@@ -107,10 +105,18 @@ function ConversationSection({ title, conversations, selectedConversation, onSel
   )
 }
 
+// NOUVELLE FONCTION UTILITAIRE pour tronquer le texte
+function truncateText(text: string | null | undefined, maxLength: number): string {
+    if (!text) return "";
+    if (text.length <= maxLength) {
+        return text;
+    }
+    return text.substring(0, maxLength) + "...";
+}
+
 function ConversationItem({ conversation, isSelected, onClick }: { conversation: Conversation; isSelected: boolean; onClick: () => void; }) {
     const lastMessageTime = conversation.last_message_at ? new Date(conversation.last_message_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "";
     
-    // Priorité n°3: Déterminer l'avatar et le statut à afficher
     const isGroup = conversation.type === 'group';
     const avatarUrl = isGroup ? conversation.avatar_url : conversation.other_participant_avatar_url;
     const displayName = isGroup ? conversation.name : conversation.other_participant_name;
@@ -123,14 +129,14 @@ function ConversationItem({ conversation, isSelected, onClick }: { conversation:
           <AvatarImage src={avatarUrl || "/placeholder.svg"} />
           <AvatarFallback className="bg-muted text-muted-foreground">{displayName?.[0]}</AvatarFallback>
         </Avatar>
-        {/* Priorité n°3: Afficher l'indicateur de présence */}
         {presenceStatus === 'online' && (
             <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white rounded-full" />
         )}
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between mb-1">
-          <h3 className="font-medium text-foreground truncate">{displayName}</h3>
+          {/* CORRECTION: Utilisation de la fonction truncateText */}
+          <h3 className="font-medium text-foreground truncate">{truncateText(displayName, 10)}</h3>
           <span className="text-xs text-muted-foreground">{lastMessageTime}</span>
         </div>
         <div className="flex items-center justify-between">
